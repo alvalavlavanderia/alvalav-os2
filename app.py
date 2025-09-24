@@ -75,18 +75,19 @@ if not st.session_state.usuario:
     st.title("🔐 Login no Sistema")
     user = st.text_input("Usuário")
     pwd = st.text_input("Senha", type="password")
+    if not st.session_state.usuario:
+    st.title("🔐 Login no Sistema")
+    user = st.text_input("Usuário")
+    pwd = st.text_input("Senha", type="password")
     if st.button("Entrar"):
-    u = autenticar(user, pwd)
-    if u:
-        st.session_state.usuario = user
-        st.success(f"Bem-vindo, {user}!")
-        st.rerun()
-    else:
-        st.error("Usuário ou senha inválidos.")
-
+        u = autenticar(user, pwd)
+        if u:
+            st.session_state.usuario = user
+            st.success(f"Bem-vindo, {user}!")
+            st.rerun() # Reinicia a aplicação para mostrar o menu
         else:
             st.error("Usuário ou senha inválidos.")
-    st.stop()
+    st.stop() # Interrompe a execução se o usuário não estiver logado
 
 # ================================
 # Sistema logado
@@ -161,9 +162,9 @@ elif menu == "Ordem de Serviço":
         descricao = st.text_area("Descrição")
         if st.button("Abrir OS"):
             c.execute("""INSERT INTO ordens_servico 
-                         (empresa, servico, descricao, status, data_abertura, data_atualizacao) 
-                         VALUES (?, ?, ?, 'Pendente', ?, ?)""",
-                      (empresa, servico, descricao, datetime.now().isoformat(), datetime.now().isoformat()))
+             (empresa, servico, descricao, status, data_abertura, data_atualizacao) 
+             VALUES (?, ?, ?, 'Aberta', ?, ?)""",
+             (empresa, servico, descricao, datetime.now().isoformat(), datetime.now().isoformat()))
             conn.commit()
             st.success("Ordem de serviço aberta com sucesso!")
 
