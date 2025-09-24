@@ -126,4 +126,9 @@ def insert_usuario(usuario, senha, is_admin_flag):
     finally:
         conn.close()
 
-def insert_ordem_servico(empresa, serv
+def insert_ordem_servico(empresa, servico, titulo, descricao):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""INSERT INTO ordens_servico
+                 (empresa, servico, titulo, descricao, status, data_abertura, data_atualizacao)
+                 VALUES (?, ?, ?, ?, 'Aberta', ?, ?)""",
