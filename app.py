@@ -114,14 +114,4 @@ def insert_servico(desc):
         conn.close()
 
 def insert_usuario(usuario, senha, is_admin_flag):
-    conn = get_db_connection()
-    c = conn.cursor()
-    try:
-        c.execute("INSERT INTO usuarios (usuario, senha, is_admin) VALUES (?, ?, ?)",
-                  (usuario, senha, 1 if is_admin_flag else 0))
-        conn.commit()
-        st.success("Usuário cadastrado com sucesso!")
-    except sqlite3.IntegrityError:
-        st.error("Erro: Usuário já existe.")
-    finally:
-        conn.
+    conn
