@@ -31,7 +31,7 @@ def init_db():
 
     c.execute('''CREATE TABLE IF NOT EXISTS ordens_servico (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                empresa TEXT, servico TEXT, descricao TEXT, status TEXT DEFAULT 'Aberta',
+                empresa TEXT, servico TEXT, titulo TEXT, descricao TEXT, status TEXT DEFAULT 'Aberta',
                 data_abertura TEXT, data_atualizacao TEXT)''')
 
     # Cria o usuário admin se ele não existir
@@ -78,11 +78,9 @@ def get_all_servicos():
 # ================================
 # Verificação inicial do DB
 # ================================
-# Garante que o banco de dados exista antes de qualquer outra operação
 if not os.path.exists(DB_FILE):
     init_db()
 
-# A partir daqui, a conexão é aberta uma única vez para uso contínuo no script
 conn = sqlite3.connect(DB_FILE, check_same_thread=False)
 c = conn.cursor()
 
@@ -91,7 +89,6 @@ c = conn.cursor()
 # ================================
 
 if "usuario" not in st.session_state or not st.session_state.usuario:
-    # Bloco de Login
     st.title("🔐 Login no Sistema")
     user = st.text_input("Usuário")
     pwd = st.text_input("Senha", type="password")
@@ -106,7 +103,6 @@ if "usuario" not in st.session_state or not st.session_state.usuario:
             st.error("Usuário ou senha inválidos.")
 
 else:
-    # Bloco da Aplicação (seção logada)
     st.sidebar.title("📌 Menu Principal")
     
     if st.sidebar.button("Sair"):
@@ -138,75 +134,4 @@ else:
                 except sqlite3.IntegrityError:
                     st.error("Erro: Empresa já cadastrada ou dados inválidos.")
 
-        # Cadastro Tipo de Serviço
-        if submenu == "Cadastro Tipo de Serviço":
-            desc = st.text_input("Descrição do Serviço")
-            if st.button("Salvar Serviço"):
-                try:
-                    c.execute("INSERT INTO tipos_servico (descricao) VALUES (?)", (desc,))
-                    conn.commit()
-                    st.success("Serviço cadastrado com sucesso!")
-                except sqlite3.IntegrityError:
-                    st.error("Erro: Serviço já cadastrado.")
-
-        # Cadastro Usuário (somente admin)
-        if submenu == "Cadastro Usuário" and is_admin(st.session_state.usuario):
-            usuario = st.text_input("Novo Usuário")
-            senha = st.text_input("Senha", type="password")
-            admin_flag = st.checkbox("Usuário administrador?")
-            if st.button("Salvar Usuário"):
-                try:
-                    c.execute("INSERT INTO usuarios (usuario, senha, is_admin) VALUES (?, ?, ?)",
-                              (usuario, senha, 1 if admin_flag else 0))
-                    conn.commit()
-                    st.success("Usuário cadastrado com sucesso!")
-                except sqlite3.IntegrityError:
-                    st.error("Erro: Usuário já existe.")
-
-    # --- ORDEM DE SERVIÇO ---
-    elif menu == "Ordem de Serviço":
-        st.header("📑 Ordem de Serviço")
-        submenu = st.selectbox("Selecione", ["Abrir OS", "Consultar OS"])
-
-        # Abrir OS
-        if submenu == "Abrir OS":
-            empresas = get_all_empresas()
-            servicos = get_all_servicos()
-            if not empresas:
-                st.warning("Nenhuma empresa cadastrada. Por favor, cadastre uma na seção 'Cadastro Empresa'.")
-            if not servicos:
-                st.warning("Nenhum tipo de serviço cadastrado. Por favor, cadastre um na seção 'Cadastro Tipo de Serviço'.")
-            
-            if empresas and servicos:
-                empresa = st.selectbox("Empresa", empresas)
-                servico = st.selectbox("Serviço", servicos)
-                descricao = st.text_area("Descrição")
-                if st.button("Abrir OS"):
-                    c.execute("""INSERT INTO ordens_servico
-                                 (empresa, servico, descricao, status, data_abertura, data_atualizacao)
-                                 VALUES (?, ?, ?, 'Aberta', ?, ?)""",
-                              (empresa, servico, descricao, datetime.now().isoformat(), datetime.now().isoformat()))
-                    conn.commit()
-                    st.success("Ordem de serviço aberta com sucesso!")
-
-        # Consultar OS
-        if submenu == "Consultar OS":
-            filtro = st.radio("Consultar por:", ["Todas Abertas", "Por Empresa", "Por Código"])
-
-            if filtro == "Todas Abertas":
-                c.execute("SELECT id, empresa, servico, status FROM ordens_servico WHERE status='Aberta'")
-                rows = c.fetchall()
-                st.table(rows)
-
-            elif filtro == "Por Empresa":
-                empresas = get_all_empresas()
-                if empresas:
-                    empresa = st.selectbox("Selecione a empresa", empresas)
-                    c.execute("SELECT id, empresa, servico, status FROM ordens_servico WHERE empresa=?", (empresa,))
-                    st.table(c.fetchall())
-
-            elif filtro == "Por Código":
-                codigo = st.number_input("Código da OS", min_value=1, step=1)
-                if codigo:
-                    c.execute("SELECT id, empresa, servico, descricao, status FROM ordens_servico WHERE id=?", (codigo,))
-                    st.table(c.fetchall())
+        # Cadastro Tipo
