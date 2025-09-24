@@ -1,207 +1,192 @@
 import streamlit as st
 import sqlite3
-import pandas as pd
+import os
+from datetime import datetime
 
-# -------------------------------
-# CONFIGURAÇÕES BÁSICAS
-# -------------------------------
-st.set_page_config(
-    page_title="ALVALAV - Sistema de OS",
-    page_icon="🧺",
-    layout="wide"
-)
-
-st.markdown("""
-    <style>
-        h1, h2, h3, h4 {
-            color: #004aad;
-        }
-        .stButton>button {
-            background-color: #004aad;
-            color: white;
-            border-radius: 8px;
-            height: 40px;
-        }
-        .stButton>button:hover {
-            background-color: #003580;
-            color: #e6e6e6;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-# -------------------------------
-# BANCO DE DADOS
-# -------------------------------
-conn = sqlite3.connect("alvalav_os.db")
+# ================================
+# Conexão com banco de dados
+# ================================
+DB_FILE = "alvalav_os.db"
+conn = sqlite3.connect(DB_FILE, check_same_thread=False)
 c = conn.cursor()
 
+# ================================
+# Inicialização e migração do DB
+# ================================
 def init_db():
+    # Criação inicial das tabelas (sem colunas novas)
     c.execute('''CREATE TABLE IF NOT EXISTS empresas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    nome TEXT, cnpj TEXT, endereco TEXT, telefone TEXT)''')
+                    nome TEXT UNIQUE, cnpj TEXT, endereco TEXT, telefone TEXT)''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS usuarios (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    usuario TEXT UNIQUE, senha TEXT, is_admin INTEGER DEFAULT 0)''')
+                    usuario TEXT UNIQUE, senha TEXT)''')  # sem is_admin no início
 
     c.execute('''CREATE TABLE IF NOT EXISTS tipos_servico (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    descricao TEXT)''')
+                    descricao TEXT UNIQUE)''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS ordens_servico (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    empresa TEXT, servico TEXT, descricao TEXT,
-                    status TEXT DEFAULT 'Aberta')''')
+                    empresa TEXT, servico TEXT, descricao TEXT, status TEXT DEFAULT 'Aberta')''')
 
-    # Garante que o usuário admin sempre exista
-    c.execute("""
-        INSERT OR IGNORE INTO usuarios (usuario, senha, is_admin)
-        VALUES ('admin', 'Alv32324@', 1)
-    """)
+    conn.commit()
+
+    # Função auxiliar para adicionar colunas se não existirem
+    def ensure_column(table_name, column_name, column_def):
+        cols = [row[1] for row in c.execute(f"PRAGMA table_info({table_name})").fetchall()]
+        if column_name not in cols:
+            c.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_def}")
+            conn.commit()
+
+    # Garantir coluna de admin
+    ensure_column("usuarios", "is_admin", "INTEGER DEFAULT 0")
+    # Garantir colunas de datas em OS
+    ensure_column("ordens_servico", "data_abertura", "TEXT")
+    ensure_column("ordens_servico", "data_atualizacao", "TEXT")
+
+    # Criar usuário admin se não existir
+    c.execute("INSERT OR IGNORE INTO usuarios (usuario, senha, is_admin) VALUES (?, ?, ?)",
+              ("admin", "Alv32324@", 1))
     conn.commit()
 
 init_db()
 
-# -------------------------------
-# LOGIN
-# -------------------------------
-st.title("ALVALAV — Sistema de Ordens de Serviço")
+# ================================
+# Funções auxiliares
+# ================================
+def autenticar(usuario, senha):
+    c.execute("SELECT * FROM usuarios WHERE usuario=? AND senha=?", (usuario, senha))
+    return c.fetchone()
 
-if "usuario_logado" not in st.session_state:
-    st.session_state.usuario_logado = None
-    st.session_state.is_admin = False
+def is_admin(usuario):
+    c.execute("SELECT is_admin FROM usuarios WHERE usuario=?", (usuario,))
+    result = c.fetchone()
+    return result and result[0] == 1
 
-if not st.session_state.usuario_logado:
-    st.subheader("🔑 Login")
-    usuario = st.text_input("Usuário")
-    senha = st.text_input("Senha", type="password")
+# ================================
+# Login
+# ================================
+if "usuario" not in st.session_state:
+    st.session_state.usuario = None
+
+if not st.session_state.usuario:
+    st.title("🔐 Login no Sistema")
+    user = st.text_input("Usuário")
+    pwd = st.text_input("Senha", type="password")
     if st.button("Entrar"):
-        user = c.execute("SELECT * FROM usuarios WHERE usuario=? AND senha=?", (usuario, senha)).fetchone()
-        if user:
-            st.session_state.usuario_logado = user[1]
-            st.session_state.is_admin = bool(user[3])
-            st.success(f"✅ Bem-vindo, {st.session_state.usuario_logado}!")
+        u = autenticar(user, pwd)
+        if u:
+            st.session_state.usuario = user
+            st.success(f"Bem-vindo, {user}!")
             st.experimental_rerun()
         else:
-            st.error("❌ Usuário ou senha inválidos.")
+            st.error("Usuário ou senha inválidos.")
     st.stop()
 
-# -------------------------------
-# MENU PRINCIPAL
-# -------------------------------
-menu_principal = st.selectbox("📌 Selecione o Menu", ["Cadastro", "Ordem de Serviço"])
+# ================================
+# Sistema logado
+# ================================
+st.sidebar.title("📌 Menu Principal")
 
-# -------------------------------
+menu = st.sidebar.selectbox("Escolha uma opção", 
+                            ["Cadastro", "Ordem de Serviço", "Sair"])
+
+# ================================
 # CADASTROS
-# -------------------------------
-if menu_principal == "Cadastro":
-    submenu = st.radio("Cadastros", ["Empresa", "Tipo de Serviço"] + (["Usuário"] if st.session_state.is_admin else []))
+# ================================
+if menu == "Cadastro":
+    st.header("📂 Cadastros")
+    submenu = st.selectbox("Selecione", 
+                           ["Cadastro Empresa", "Cadastro Tipo de Serviço"] + 
+                           (["Cadastro Usuário"] if is_admin(st.session_state.usuario) else []))
 
-    if submenu == "Empresa":
-        st.subheader("🏢 Cadastro de Empresa")
-        nome = st.text_input("Nome da empresa")
+    # Cadastro Empresa
+    if submenu == "Cadastro Empresa":
+        nome = st.text_input("Nome da Empresa")
         cnpj = st.text_input("CNPJ")
         endereco = st.text_input("Endereço")
         telefone = st.text_input("Telefone")
         if st.button("Salvar Empresa"):
-            c.execute("INSERT INTO empresas (nome, cnpj, endereco, telefone) VALUES (?,?,?,?)",
-                      (nome, cnpj, endereco, telefone))
-            conn.commit()
-            st.success("✅ Empresa cadastrada com sucesso!")
+            try:
+                c.execute("INSERT INTO empresas (nome, cnpj, endereco, telefone) VALUES (?, ?, ?, ?)",
+                          (nome, cnpj, endereco, telefone))
+                conn.commit()
+                st.success("Empresa cadastrada com sucesso!")
+            except:
+                st.error("Erro: Empresa já cadastrada ou dados inválidos.")
 
-    elif submenu == "Tipo de Serviço":
-        st.subheader("⚙️ Cadastro de Tipo de Serviço")
-        descricao = st.text_input("Descrição do serviço")
+    # Cadastro Tipo de Serviço
+    if submenu == "Cadastro Tipo de Serviço":
+        desc = st.text_input("Descrição do Serviço")
         if st.button("Salvar Serviço"):
-            c.execute("INSERT INTO tipos_servico (descricao) VALUES (?)", (descricao,))
-            conn.commit()
-            st.success("✅ Tipo de serviço cadastrado com sucesso!")
+            try:
+                c.execute("INSERT INTO tipos_servico (descricao) VALUES (?)", (desc,))
+                conn.commit()
+                st.success("Serviço cadastrado com sucesso!")
+            except:
+                st.error("Erro: Serviço já cadastrado.")
 
-    elif submenu == "Usuário":
-        st.subheader("👤 Cadastro de Usuário (apenas admin)")
-        usuario = st.text_input("Usuário")
+    # Cadastro Usuário (somente admin)
+    if submenu == "Cadastro Usuário" and is_admin(st.session_state.usuario):
+        usuario = st.text_input("Novo Usuário")
         senha = st.text_input("Senha", type="password")
+        admin_flag = st.checkbox("Usuário administrador?")
         if st.button("Salvar Usuário"):
             try:
-                c.execute("INSERT INTO usuarios (usuario, senha, is_admin) VALUES (?,?,0)", (usuario, senha))
+                c.execute("INSERT INTO usuarios (usuario, senha, is_admin) VALUES (?, ?, ?)",
+                          (usuario, senha, 1 if admin_flag else 0))
                 conn.commit()
-                st.success("✅ Usuário cadastrado com sucesso!")
-            except sqlite3.IntegrityError:
-                st.error("⚠️ Esse usuário já existe!")
+                st.success("Usuário cadastrado com sucesso!")
+            except:
+                st.error("Erro: Usuário já existe.")
 
-# -------------------------------
+# ================================
 # ORDEM DE SERVIÇO
-# -------------------------------
-elif menu_principal == "Ordem de Serviço":
-    submenu = st.radio("Ordem de Serviço", ["Abrir OS", "Consultar OS"])
+# ================================
+elif menu == "Ordem de Serviço":
+    st.header("📑 Ordem de Serviço")
+    submenu = st.selectbox("Selecione", ["Abrir OS", "Consultar OS"])
 
+    # Abrir OS
     if submenu == "Abrir OS":
-        st.subheader("📝 Abrir Ordem de Serviço")
         empresas = [row[0] for row in c.execute("SELECT nome FROM empresas").fetchall()]
         servicos = [row[0] for row in c.execute("SELECT descricao FROM tipos_servico").fetchall()]
-
-        empresa = st.selectbox("Selecione a empresa", empresas if empresas else ["Nenhuma empresa cadastrada"])
-        servico = st.selectbox("Selecione o serviço", servicos if servicos else ["Nenhum serviço cadastrado"])
-        descricao = st.text_area("Descrição da OS")
-
+        empresa = st.selectbox("Empresa", empresas)
+        servico = st.selectbox("Serviço", servicos)
+        descricao = st.text_area("Descrição")
         if st.button("Abrir OS"):
-            c.execute("INSERT INTO ordens_servico (empresa, servico, descricao, status) VALUES (?,?,?,?)",
-                      (empresa, servico, descricao, "Aberta"))
+            c.execute("""INSERT INTO ordens_servico 
+                         (empresa, servico, descricao, status, data_abertura, data_atualizacao) 
+                         VALUES (?, ?, ?, 'Pendente', ?, ?)""",
+                      (empresa, servico, descricao, datetime.now().isoformat(), datetime.now().isoformat()))
             conn.commit()
-            st.success("✅ Ordem de Serviço criada com sucesso!")
+            st.success("Ordem de serviço aberta com sucesso!")
 
-    elif submenu == "Consultar OS":
-        st.subheader("🔍 Consultar Ordens de Serviço")
+    # Consultar OS
+    if submenu == "Consultar OS":
+        filtro = st.radio("Consultar por:", ["Todas Pendentes", "Por Empresa", "Por Código"])
 
-        # Sempre mostra pendentes primeiro
-        st.write("📌 **OS Pendentes:**")
-        pendentes = c.execute("SELECT * FROM ordens_servico WHERE status!='Concluída'").fetchall()
-        if pendentes:
-            df_pend = pd.DataFrame(pendentes, columns=["ID", "Empresa", "Serviço", "Descrição", "Status"])
-            df_pend["Situação"] = df_pend["Status"].apply(lambda x: "Pendente" if x != "Concluída" else "Finalizada")
-            st.dataframe(df_pend)
+        if filtro == "Todas Pendentes":
+            c.execute("SELECT id, empresa, servico, status FROM ordens_servico WHERE status='Pendente'")
+            rows = c.fetchall()
+            st.table(rows)
 
-        st.write("---")
-        opcao_consulta = st.radio("Consultar por:", ["Todas", "Empresa", "Código da OS"])
-
-        if opcao_consulta == "Todas":
-            ordens = c.execute("SELECT * FROM ordens_servico").fetchall()
-        elif opcao_consulta == "Empresa":
+        elif filtro == "Por Empresa":
             empresas = [row[0] for row in c.execute("SELECT nome FROM empresas").fetchall()]
-            empresa_filtro = st.selectbox("Selecione a empresa", empresas)
-            ordens = c.execute("SELECT * FROM ordens_servico WHERE empresa=?", (empresa_filtro,)).fetchall()
-        elif opcao_consulta == "Código da OS":
-            codigo = st.number_input("Digite o código da OS", min_value=1, step=1)
-            ordens = c.execute("SELECT * FROM ordens_servico WHERE id=?", (codigo,)).fetchall()
+            empresa = st.selectbox("Selecione a empresa", empresas)
+            c.execute("SELECT id, empresa, servico, status FROM ordens_servico WHERE empresa=?", (empresa,))
+            st.table(c.fetchall())
 
-        if ordens:
-            df = pd.DataFrame(ordens, columns=["ID", "Empresa", "Serviço", "Descrição", "Status"])
-            df["Situação"] = df["Status"].apply(lambda x: "Pendente" if x != "Concluída" else "Finalizada")
-            st.dataframe(df)
+        elif filtro == "Por Código":
+            codigo = st.number_input("Código da OS", min_value=1, step=1)
+            c.execute("SELECT id, empresa, servico, descricao, status FROM ordens_servico WHERE id=?", (codigo,))
+            st.table(c.fetchall())
 
-            # Exportar para Excel
-            st.download_button(
-                label="📥 Exportar para Excel",
-                data=df.to_excel("ordens_servico.xlsx", index=False),
-                file_name="ordens_servico.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-            # Alterar status
-            for ordem in ordens:
-                st.markdown(f"### OS {ordem[0]} - {ordem[1]}")
-                st.write(f"Serviço: {ordem[2]} | Status atual: **{ordem[4]}**")
-                novo_status = st.selectbox(
-                    f"Alterar status da OS {ordem[0]}",
-                    ["Aberta", "Em andamento", "Concluída"],
-                    index=["Aberta", "Em andamento", "Concluída"].index(ordem[4]) if ordem[4] else 0,
-                    key=f"status_{ordem[0]}"
-                )
-                if st.button(f"Salvar Status OS {ordem[0]}", key=f"btn_status_{ordem[0]}"):
-                    c.execute("UPDATE ordens_servico SET status=? WHERE id=?", (novo_status, ordem[0]))
-                    conn.commit()
-                    st.success(f"✅ Status da OS {ordem[0]} atualizado para {novo_status}")
-                    st.experimental_rerun()
-        else:
-            st.info("Nenhuma OS encontrada com o filtro aplicado.")
-
+# ================================
+# SAIR
+# ================================
+elif menu == "Sair":
+    st.session_state.usuario = None
+    st.experimental_rerun()
