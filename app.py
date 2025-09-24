@@ -101,17 +101,4 @@ def insert_empresa(nome, cnpj, endereco, telefone):
     finally:
         conn.close()
 
-def insert_servico(desc):
-    conn = get_db_connection()
-    c = conn.cursor()
-    try:
-        c.execute("INSERT INTO tipos_servico (descricao) VALUES (?)", (desc,))
-        conn.commit()
-        st.success("Serviço cadastrado com sucesso!")
-    except sqlite3.IntegrityError:
-        st.error("Erro: Serviço já cadastrado.")
-    finally:
-        conn.close()
-
-def insert_usuario(usuario, senha, is_admin_flag):
-    conn = get_db_connection()
+def insert_servico(desc
