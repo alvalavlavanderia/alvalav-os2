@@ -68,45 +68,29 @@ def is_admin(usuario):
 # ================================
 # Login
 # ================================
-if "usuario" not in st.session_state:
-    st.session_state.usuario = None
+# Verifique se o usuário NÃO está na sessão.
+if "usuario" not in st.session_state or not st.session_state.usuario:
+    st.title("🔐 Login no Sistema")
+    user = st.text_input("Usuário")
+    pwd = st.text_input("Senha", type="password")
 
-if not st.session_state.usuario:
-    st.title("🔐 Login no Sistema")
-    user = st.text_input("Usuário")
-    pwd = st.text_input("Senha", type="password")
-    # Seu código deve ter essa estrutura
-if not st.session_state.usuario:
-    st.title("🔐 Login no Sistema")
-    user = st.text_input("Usuário")
-    pwd = st.text_input("Senha", type="password")
     if st.button("Entrar"):
-        # Este bloco também precisa estar identado
         u = autenticar(user, pwd)
         if u:
             st.session_state.usuario = user
             st.success(f"Bem-vindo, {user}!")
+            # O rerun aqui é o que reinicia o script para o próximo passo.
             st.rerun()
         else:
             st.error("Usuário ou senha inválidos.")
+    # Use st.stop() para garantir que nada abaixo seja executado se o login não foi feito.
     st.stop()
-    if st.button("Entrar"):
-        u = autenticar(user, pwd)
-        if u:
-            st.session_state.usuario = user
-            st.success(f"Bem-vindo, {user}!")
-            st.rerun()
-        else:
-            st.error("Usuário ou senha inválidos.")
-    st.stop() # Interrompe a execução se o usuário não estiver logado
 
 # ================================
-# Sistema logado
+# Sistema logado (Este código só é executado se o login foi bem-sucedido)
 # ================================
 st.sidebar.title("📌 Menu Principal")
-
-menu = st.sidebar.selectbox("Escolha uma opção", 
-                            ["Cadastro", "Ordem de Serviço", "Sair"])
+# ... (o resto do seu código, sem nenhuma mudança de indentação)
 
 # ================================
 # CADASTROS
