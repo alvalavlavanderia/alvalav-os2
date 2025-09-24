@@ -14,38 +14,30 @@ c = conn.cursor()
 # Inicialização e migração do DB
 # ================================
 def init_db():
-    # Criação inicial das tabelas
+    # Criação das tabelas
     c.execute('''CREATE TABLE IF NOT EXISTS empresas (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome TEXT UNIQUE, cnpj TEXT, endereco TEXT, telefone TEXT)''')
-
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nome TEXT UNIQUE, cnpj TEXT, endereco TEXT, telefone TEXT)''')
+    
     c.execute('''CREATE TABLE IF NOT EXISTS usuarios (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                usuario TEXT UNIQUE, senha TEXT)''')
-
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    usuario TEXT UNIQUE, senha TEXT, is_admin INTEGER DEFAULT 0)''')
+    
     c.execute('''CREATE TABLE IF NOT EXISTS tipos_servico (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                descricao TEXT UNIQUE)''')
-
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    descricao TEXT UNIQUE)''')
+    
     c.execute('''CREATE TABLE IF NOT EXISTS ordens_servico (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                empresa TEXT, servico TEXT, descricao TEXT, status TEXT DEFAULT 'Aberta',
-                data_abertura TEXT, data_atualizacao TEXT)''')
-    
-    # Adicionando as colunas que podem não existir.
-    # A verificação e o ALTER TABLE precisam ser um commit separado
-    
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    empresa TEXT, servico TEXT, descricao TEXT, status TEXT DEFAULT 'Aberta',
+                    data_abertura TEXT, data_atualizacao TEXT)''')
+
     # Criar usuário admin se não existir
     c.execute("INSERT OR IGNORE INTO usuarios (usuario, senha, is_admin) VALUES (?, ?, ?)",
                 ("admin", "Alv32324@", 1))
     
-    # Todas as operações de DDL e DML são feitas.
-    # Agora, o commit único no final.
+    # Commit único para salvar todas as alterações de uma vez
     conn.commit()
-
-# Removendo a função auxiliar, pois a lógica de migração pode ser integrada
-# para simplificar. O erro é que a função `ensure_column` tentava comitar
-# dentro de um bloco maior de `init_db`.
 
 init_db()
 
