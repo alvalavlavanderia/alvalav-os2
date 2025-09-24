@@ -97,7 +97,7 @@ if not st.session_state.usuario:
         st.success(f"Bem-vindo, {user}!")
         st.rerun()
     else:
-        st.error("Usuário ou senha inválidos."))
+        st.error("Usuário ou senha inválidos.")
     st.stop() # Interrompe a execução se o usuário não estiver logado
 
 # ================================
