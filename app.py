@@ -90,7 +90,7 @@ if not st.session_state.usuario:
         else:
             st.error("Usuário ou senha inválidos.")
     st.stop()
-        if st.button("Entrar"):
+    if st.button("Entrar"):
     u = autenticar(user, pwd)
     if u:
         st.session_state.usuario = user
