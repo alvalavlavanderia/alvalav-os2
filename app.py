@@ -34,7 +34,6 @@ def init_db():
                 empresa TEXT, servico TEXT, titulo TEXT, descricao TEXT, status TEXT DEFAULT 'Aberta',
                 data_abertura TEXT, data_atualizacao TEXT)''')
 
-    # Cria o usuário admin se ele não existir
     c.execute("INSERT OR IGNORE INTO usuarios (usuario, senha, is_admin) VALUES (?, ?, ?)",
               ("admin", "Alv32324@", 1))
     
@@ -89,6 +88,7 @@ c = conn.cursor()
 # ================================
 
 if "usuario" not in st.session_state or not st.session_state.usuario:
+    # Bloco de Login
     st.title("🔐 Login no Sistema")
     user = st.text_input("Usuário")
     pwd = st.text_input("Senha", type="password")
@@ -103,6 +103,7 @@ if "usuario" not in st.session_state or not st.session_state.usuario:
             st.error("Usuário ou senha inválidos.")
 
 else:
+    # Bloco da Aplicação (seção logada)
     st.sidebar.title("📌 Menu Principal")
     
     if st.sidebar.button("Sair"):
@@ -119,7 +120,7 @@ else:
                                ["Cadastro Empresa", "Cadastro Tipo de Serviço"] +
                                (["Cadastro Usuário"] if is_admin(st.session_state.usuario) else []))
 
-        # Cadastro Empresa
+        # Estrutura if/elif para os submenus de Cadastro
         if submenu == "Cadastro Empresa":
             nome = st.text_input("Nome da Empresa")
             cnpj = st.text_input("CNPJ")
@@ -134,4 +135,94 @@ else:
                 except sqlite3.IntegrityError:
                     st.error("Erro: Empresa já cadastrada ou dados inválidos.")
 
-        # Cadastro Tipo
+        elif submenu == "Cadastro Tipo de Serviço":
+            desc = st.text_input("Descrição do Serviço")
+            if st.button("Salvar Serviço"):
+                try:
+                    c.execute("INSERT INTO tipos_servico (descricao) VALUES (?)", (desc,))
+                    conn.commit()
+                    st.success("Serviço cadastrado com sucesso!")
+                except sqlite3.IntegrityError:
+                    st.error("Erro: Serviço já cadastrado.")
+
+        elif submenu == "Cadastro Usuário" and is_admin(st.session_state.usuario):
+            usuario = st.text_input("Novo Usuário")
+            senha = st.text_input("Senha", type="password")
+            admin_flag = st.checkbox("Usuário administrador?")
+            if st.button("Salvar Usuário"):
+                try:
+                    c.execute("INSERT INTO usuarios (usuario, senha, is_admin) VALUES (?, ?, ?)",
+                              (usuario, senha, 1 if admin_flag else 0))
+                    conn.commit()
+                    st.success("Usuário cadastrado com sucesso!")
+                except sqlite3.IntegrityError:
+                    st.error("Erro: Usuário já existe.")
+
+    # --- ORDEM DE SERVIÇO ---
+    elif menu == "Ordem de Serviço":
+        st.header("📑 Ordem de Serviço")
+        submenu = st.selectbox("Selecione", ["Abrir OS", "Consultar OS"])
+
+        # Estrutura if/elif para os submenus de Ordem de Serviço
+        if submenu == "Abrir OS":
+            empresas = get_all_empresas()
+            servicos = get_all_servicos()
+            if not empresas:
+                st.warning("Nenhuma empresa cadastrada. Por favor, cadastre uma na seção 'Cadastro Empresa'.")
+            if not servicos:
+                st.warning("Nenhum tipo de serviço cadastrado. Por favor, cadastre um na seção 'Cadastro Tipo de Serviço'.")
+            
+            if empresas and servicos:
+                empresa = st.selectbox("Empresa", empresas)
+                servico = st.selectbox("Serviço", servicos)
+                titulo = st.text_input("Título da OS")
+                descricao = st.text_area("Descrição")
+                if st.button("Abrir OS"):
+                    c.execute("""INSERT INTO ordens_servico
+                                 (empresa, servico, titulo, descricao, status, data_abertura, data_atualizacao)
+                                 VALUES (?, ?, ?, ?, 'Aberta', ?, ?)""",
+                              (empresa, servico, titulo, descricao, datetime.now().isoformat(), datetime.now().isoformat()))
+                    conn.commit()
+                    st.success("Ordem de serviço aberta com sucesso!")
+
+        elif submenu == "Consultar OS":
+            filtro = st.radio("Consultar por:", ["Todas Abertas", "Por Empresa", "Por Código"])
+
+            query = ""
+            params = ()
+            if filtro == "Todas Abertas":
+                query = "SELECT id, empresa, titulo, status FROM ordens_servico WHERE status='Aberta'"
+            elif filtro == "Por Empresa":
+                empresas = get_all_empresas()
+                if empresas:
+                    empresa_selecionada = st.selectbox("Selecione a empresa", empresas)
+                    query = "SELECT id, empresa, titulo, status FROM ordens_servico WHERE empresa=?"
+                    params = (empresa_selecionada,)
+            elif filtro == "Por Código":
+                codigo = st.number_input("Código da OS", min_value=1, step=1)
+                if codigo:
+                    query = "SELECT id, empresa, titulo, status FROM ordens_servico WHERE id=?"
+                    params = (codigo,)
+
+            if query:
+                c.execute(query, params)
+                rows = c.fetchall()
+                if rows:
+                    st.header("Lista de Ordens de Serviço")
+                    st.dataframe(rows,
+                                 column_names=["CÓDIGO", "EMPRESA", "TÍTULO", "SITUAÇÃO"],
+                                 hide_index=True)
+
+                    os_ids = [row[0] for row in rows]
+                    st.write("---")
+                    st.subheader("Finalizar Ordem de Serviço")
+                    os_selecionada_id = st.selectbox("Selecione a OS pelo Código", os_ids)
+                    
+                    if st.button("Finalizar OS selecionada"):
+                        c.execute("UPDATE ordens_servico SET status=?, data_atualizacao=? WHERE id=?", 
+                                  ('Finalizada', datetime.now().isoformat(), os_selecionada_id))
+                        conn.commit()
+                        st.success(f"OS {os_selecionada_id} finalizada com sucesso!")
+                        st.rerun()
+                else:
+                    st.info("Nenhuma OS encontrada com o critério selecionado.")
