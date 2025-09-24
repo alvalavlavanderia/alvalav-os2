@@ -132,3 +132,151 @@ def insert_ordem_servico(empresa, servico, titulo, descricao):
     c.execute("""INSERT INTO ordens_servico
                  (empresa, servico, titulo, descricao, status, data_abertura, data_atualizacao)
                  VALUES (?, ?, ?, ?, 'Aberta', ?, ?)""",
+              (empresa, servico, titulo, descricao, datetime.now().isoformat(), datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+    st.success("Ordem de serviço aberta com sucesso!")
+    st.rerun()
+
+def get_ordens_servico(query, params):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute(query, params)
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def update_os_status(os_id, status):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("UPDATE ordens_servico SET status=?, data_atualizacao=? WHERE id=?", 
+              (status, datetime.now().isoformat(), os_id))
+    conn.commit()
+    conn.close()
+
+# ================================
+# Verificação inicial do DB
+# ================================
+if not os.path.exists(DB_FILE):
+    init_db()
+
+# ================================
+# Lógica da Aplicação: Login vs. Conteúdo
+# ================================
+
+if "usuario" not in st.session_state or not st.session_state.usuario:
+    st.title("🔐 Login no Sistema")
+    user = st.text_input("Usuário")
+    pwd = st.text_input("Senha", type="password")
+
+    if st.button("Entrar"):
+        u = autenticar(user, pwd)
+        if u:
+            st.session_state.usuario = user
+            st.success(f"Bem-vindo, {user}!")
+            st.rerun()
+        else:
+            st.error("Usuário ou senha inválidos.")
+
+    st.write("---")
+    st.subheader("Opções de Manutenção")
+    st.info("Caso não consiga fazer login, você pode reiniciar o banco de dados. Isso irá apagar todos os dados e recriar o usuário 'admin'.")
+    if st.button("Reiniciar Banco de Dados"):
+        reiniciar_db()
+
+else:
+    st.sidebar.title("📌 Menu Principal")
+    
+    if st.sidebar.button("Sair"):
+        st.session_state.usuario = None
+        st.rerun()
+
+    menu = st.sidebar.selectbox("Escolha uma opção",
+                                ["Ordem de Serviço", "Cadastro"])
+    
+    if menu == "Cadastro":
+        st.header("📂 Cadastros")
+        submenu = st.selectbox("Selecione",
+                               ["Cadastro Empresa", "Cadastro Tipo de Serviço"] +
+                               (["Cadastro Usuário"] if is_admin(st.session_state.usuario) else []))
+
+        if submenu == "Cadastro Empresa":
+            nome = st.text_input("Nome da Empresa")
+            cnpj = st.text_input("CNPJ")
+            endereco = st.text_input("Endereço")
+            telefone = st.text_input("Telefone")
+            if st.button("Salvar Empresa"):
+                insert_empresa(nome, cnpj, endereco, telefone)
+
+        elif submenu == "Cadastro Tipo de Serviço":
+            desc = st.text_input("Descrição do Serviço")
+            if st.button("Salvar Serviço"):
+                insert_servico(desc)
+
+        elif submenu == "Cadastro Usuário" and is_admin(st.session_state.usuario):
+            usuario = st.text_input("Novo Usuário")
+            senha = st.text_input("Senha", type="password")
+            admin_flag = st.checkbox("Usuário administrador?")
+            if st.button("Salvar Usuário"):
+                insert_usuario(usuario, senha, admin_flag)
+
+    elif menu == "Ordem de Serviço":
+        st.header("📑 Ordem de Serviço")
+        submenu = st.selectbox("Selecione", ["Abrir OS", "Consultar OS"])
+
+        if submenu == "Abrir OS":
+            empresas = get_all_empresas()
+            servicos = get_all_servicos()
+            if not empresas:
+                st.warning("Nenhuma empresa cadastrada. Por favor, cadastre uma na seção 'Cadastro Empresa'.")
+            if not servicos:
+                st.warning("Nenhum tipo de serviço cadastrado. Por favor, cadastre um na seção 'Cadastro Tipo de Serviço'.")
+            
+            if empresas and servicos:
+                empresa = st.selectbox("Empresa", empresas)
+                servico = st.selectbox("Serviço", servicos)
+                titulo = st.text_input("Título da OS")
+                descricao = st.text_area("Descrição")
+                if st.button("Abrir OS"):
+                    insert_ordem_servico(empresa, servico, titulo, descricao)
+
+        elif submenu == "Consultar OS":
+            filtro = st.radio("Consultar por:", ["Todas Abertas", "Por Empresa", "Por Código"])
+
+            query = ""
+            params = ()
+            if filtro == "Todas Abertas":
+                query = "SELECT id, empresa, titulo, status FROM ordens_servico WHERE status='Aberta'"
+            elif filtro == "Por Empresa":
+                empresas = get_all_empresas()
+                if empresas:
+                    empresa_selecionada = st.selectbox("Selecione a empresa", empresas)
+                    query = "SELECT id, empresa, titulo, status FROM ordens_servico WHERE empresa=?"
+                    params = (empresa_selecionada,)
+                else:
+                    st.info("Nenhuma empresa encontrada.")
+            elif filtro == "Por Código":
+                codigo = st.number_input("Código da OS", min_value=1, step=1)
+                if codigo:
+                    query = "SELECT id, empresa, titulo, status FROM ordens_servico WHERE id=?"
+                    params = (codigo,)
+
+            if query and params:
+                rows = get_ordens_servico(query, params)
+                if rows:
+                    st.header("Lista de Ordens de Serviço")
+                    st.dataframe(rows,
+                                 column_names=["CÓDIGO", "EMPRESA", "TÍTULO", "SITUAÇÃO"],
+                                 hide_index=True)
+
+                    os_ids = [row[0] for row in rows]
+                    st.write("---")
+                    st.subheader("Finalizar Ordem de Serviço")
+                    os_selecionada_id = st.selectbox("Selecione a OS pelo Código", os_ids)
+                    
+                    if st.button("Finalizar OS selecionada"):
+                        update_os_status(os_selecionada_id, 'Finalizada')
+                        st.success(f"OS {os_selecionada_id} finalizada com sucesso!")
+                        st.rerun()
+                else:
+                    st.info("N
