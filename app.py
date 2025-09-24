@@ -75,12 +75,14 @@ if not st.session_state.usuario:
     st.title("🔐 Login no Sistema")
     user = st.text_input("Usuário")
     pwd = st.text_input("Senha", type="password")
-    if not st.session_state.usuario:
+    # Seu código deve ter essa estrutura
+if not st.session_state.usuario:
     st.title("🔐 Login no Sistema")
     user = st.text_input("Usuário")
     pwd = st.text_input("Senha", type="password")
     if st.button("Entrar"):
-    u = autenticar(user, pwd)
+        # Este bloco também precisa estar identado
+        u = autenticar(user, pwd)
         if u:
             st.session_state.usuario = user
             st.success(f"Bem-vindo, {user}!")
