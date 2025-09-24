@@ -101,4 +101,44 @@ def insert_empresa(nome, cnpj, endereco, telefone):
     finally:
         conn.close()
 
-def insert_servico(desc
+def insert_servico(desc):
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("INSERT INTO tipos_servico (descricao) VALUES (?)", (desc,))
+        conn.commit()
+        st.success("Serviço cadastrado com sucesso!")
+    except sqlite3.IntegrityError:
+        st.error("Erro: Serviço já cadastrado.")
+    finally:
+        conn.close()
+
+def insert_usuario(usuario, senha, is_admin_flag):
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("INSERT INTO usuarios (usuario, senha, is_admin) VALUES (?, ?, ?)",
+                  (usuario, senha, 1 if is_admin_flag else 0))
+        conn.commit()
+        st.success("Usuário cadastrado com sucesso!")
+    except sqlite3.IntegrityError:
+        st.error("Erro: Usuário já existe.")
+    finally:
+        conn.close()
+
+def insert_ordem_servico(empresa, servico, titulo, descricao):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""INSERT INTO ordens_servico
+                 (empresa, servico, titulo, descricao, status, data_abertura, data_atualizacao)
+                 VALUES (?, ?, ?, ?, 'Aberta', ?, ?)""",
+              (empresa, servico, titulo, descricao, datetime.now().isoformat(), datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+    st.success("Ordem de serviço aberta com sucesso!")
+    st.rerun()
+
+def get_ordens_servico(query, params):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute
