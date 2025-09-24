@@ -80,7 +80,7 @@ if not st.session_state.usuario:
     user = st.text_input("Usuário")
     pwd = st.text_input("Senha", type="password")
     if st.button("Entrar"):
-        u = autenticar(user, pwd)
+    u = autenticar(user, pwd)
         if u:
             st.session_state.usuario = user
             st.success(f"Bem-vindo, {user}!")
