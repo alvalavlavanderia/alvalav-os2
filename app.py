@@ -91,13 +91,13 @@ if not st.session_state.usuario:
             st.error("Usuário ou senha inválidos.")
     st.stop()
     if st.button("Entrar"):
-    u = autenticar(user, pwd)
-    if u:
-        st.session_state.usuario = user
-        st.success(f"Bem-vindo, {user}!")
-        st.rerun()
-    else:
-        st.error("Usuário ou senha inválidos.")
+        u = autenticar(user, pwd)
+        if u:
+            st.session_state.usuario = user
+            st.success(f"Bem-vindo, {user}!")
+            st.rerun()
+        else:
+            st.error("Usuário ou senha inválidos.")
     st.stop() # Interrompe a execução se o usuário não estiver logado
 
 # ================================
