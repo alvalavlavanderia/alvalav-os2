@@ -113,4 +113,82 @@ def insert_servico(desc):
     finally:
         conn.close()
 
-def insert_usuario(usuario, senha
+def insert_usuario(usuario, senha, is_admin_flag):
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("INSERT INTO usuarios (usuario, senha, is_admin) VALUES (?, ?, ?)",
+                  (usuario, senha, 1 if is_admin_flag else 0))
+        conn.commit()
+        st.success("Usuário cadastrado com sucesso!")
+    except sqlite3.IntegrityError:
+        st.error("Erro: Usuário já existe.")
+    finally:
+        conn.close()
+
+def insert_ordem_servico(empresa, servico, titulo, descricao):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""INSERT INTO ordens_servico
+                 (empresa, servico, titulo, descricao, status, data_abertura, data_atualizacao)
+                 VALUES (?, ?, ?, ?, 'Aberta', ?, ?)""",
+              (empresa, servico, titulo, descricao, datetime.now().isoformat(), datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+    st.success("Ordem de serviço aberta com sucesso!")
+    st.rerun()
+
+def get_ordens_servico(query, params):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute(query, params)
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def update_os_status(os_id, status):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("UPDATE ordens_servico SET status=?, data_atualizacao=? WHERE id=?", 
+              (status, datetime.now().isoformat(), os_id))
+    conn.commit()
+    conn.close()
+
+# ================================
+# Verificação inicial do DB
+# ================================
+if not os.path.exists(DB_FILE):
+    init_db()
+
+# ================================
+# Lógica da Aplicação: Login vs. Conteúdo
+# ================================
+
+if "usuario" not in st.session_state or not st.session_state.usuario:
+    st.title("🔐 Login no Sistema")
+    user = st.text_input("Usuário")
+    pwd = st.text_input("Senha", type="password")
+
+    if st.button("Entrar"):
+        u = autenticar(user, pwd)
+        if u:
+            st.session_state.usuario = user
+            st.success(f"Bem-vindo, {user}!")
+            st.rerun()
+        else:
+            st.error("Usuário ou senha inválidos.")
+
+    st.write("---")
+    st.subheader("Opções de Manutenção")
+    st.info("Caso não consiga fazer login, você pode reiniciar o banco de dados. Isso irá apagar todos os dados e recriar o usuário 'admin'.")
+    if st.button("Reiniciar Banco de Dados"):
+        reiniciar_db()
+
+else:
+    st.sidebar.title("📌 Menu Principal")
+    
+    if st.sidebar.button("Sair"):
+        st.session_state.usuario = None
+        st.rerun()
+
+    menu = st.sidebar.selectbox("Escolha uma opção",
