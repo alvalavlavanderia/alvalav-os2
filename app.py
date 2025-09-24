@@ -3,6 +3,26 @@ import sqlite3
 import os
 from datetime import datetime
 
+# Adicione esta função ao seu script, em qualquer lugar antes do menu.
+def reiniciar_db():
+    # Verifica se o arquivo existe e o exclui
+    if os.path.exists(DB_FILE):
+        os.remove(DB_FILE)
+        st.success("Banco de dados existente removido com sucesso.")
+    
+    # Chama a função de inicialização para recriar o DB
+    init_db()
+    st.success("Banco de dados reiniciado e recriado com sucesso!")
+
+# ... (restante do seu código) ...
+
+# Adicione um botão para reiniciar o DB na sua barra lateral (sidebar)
+# Recomendo colocá-lo em uma seção separada ou dentro da área de administração.
+# Exemplo:
+if st.sidebar.button("Reiniciar Banco de Dados"):
+    reiniciar_db()
+    st.rerun() # Recarrega a página para refletir as mudanças
+
 # ================================
 # Conexão com banco de dados
 # ================================
