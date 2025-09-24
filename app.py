@@ -95,4 +95,22 @@ def insert_empresa(nome, cnpj, endereco, telefone):
         c.execute("INSERT INTO empresas (nome, cnpj, endereco, telefone) VALUES (?, ?, ?, ?)",
                   (nome, cnpj, endereco, telefone))
         conn.commit()
-        st.success("Emp
+        st.success("Empresa cadastrada com sucesso!")
+    except sqlite3.IntegrityError:
+        st.error("Erro: Empresa já cadastrada ou dados inválidos.")
+    finally:
+        conn.close()
+
+def insert_servico(desc):
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("INSERT INTO tipos_servico (descricao) VALUES (?)", (desc,))
+        conn.commit()
+        st.success("Serviço cadastrado com sucesso!")
+    except sqlite3.IntegrityError:
+        st.error("Erro: Serviço já cadastrado.")
+    finally:
+        conn.close()
+
+def insert_usuario(usuario, senha
