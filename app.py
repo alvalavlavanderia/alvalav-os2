@@ -109,9 +109,3 @@ def insert_servico(desc):
         conn.commit()
         st.success("Serviço cadastrado com sucesso!")
     except sqlite3.IntegrityError:
-        st.error("Erro: Serviço já cadastrado.")
-    finally:
-        conn.close()
-
-def insert_usuario(usuario, senha, is_admin_flag):
-    conn
