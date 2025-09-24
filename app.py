@@ -118,43 +118,4 @@ def insert_usuario(usuario, senha, is_admin_flag):
     c = conn.cursor()
     try:
         c.execute("INSERT INTO usuarios (usuario, senha, is_admin) VALUES (?, ?, ?)",
-                  (usuario, senha, 1 if is_admin_flag else 0))
-        conn.commit()
-        st.success("Usuário cadastrado com sucesso!")
-    except sqlite3.IntegrityError:
-        st.error("Erro: Usuário já existe.")
-    finally:
-        conn.close()
-
-def insert_ordem_servico(empresa, servico, titulo, descricao):
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("""INSERT INTO ordens_servico
-                 (empresa, servico, titulo, descricao, status, data_abertura, data_atualizacao)
-                 VALUES (?, ?, ?, ?, 'Aberta', ?, ?)""",
-              (empresa, servico, titulo, descricao, datetime.now().isoformat(), datetime.now().isoformat()))
-    conn.commit()
-    conn.close()
-    st.success("Ordem de serviço aberta com sucesso!")
-    st.rerun()
-
-def get_ordens_servico(query, params):
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute(query, params)
-    rows = c.fetchall()
-    conn.close()
-    return rows
-
-def update_os_status(os_id, status):
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("UPDATE ordens_servico SET status=?, data_atualizacao=? WHERE id=?", 
-              (status, datetime.now().isoformat(), os_id))
-    conn.commit()
-    conn.close()
-
-# ================================
-# Verificação inicial do DB
-# ================================
-if not os
+                  (usuario, senha, 1 if is_admin_flag else
