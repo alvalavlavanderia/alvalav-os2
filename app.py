@@ -157,13 +157,13 @@ def login_screen():
     usuario = st.text_input("Usuário")
     senha = st.text_input("Senha", type="password")
     if st.button("Entrar"):
-        user = autenticar_usuario(usuario, senha)
-        if user:
-            st.session_state["usuario"] = usuario
-            st.success(f"Bem-vindo, {usuario}!")
-            st.experimental_rerun()
-        else:
-            st.error("Usuário ou senha incorretos.")
+    user = autenticar_usuario(usuario, senha)
+    if user:
+        st.session_state["usuario"] = usuario
+        st.success(f"Bem-vindo, {usuario}!")
+        st.rerun()   # <--- aqui
+    else:
+        st.error("Usuário ou senha incorretos.")
 
 def main_app():
     st.sidebar.title("📋 Menu")
@@ -235,9 +235,9 @@ def main_app():
             st.info("Nenhuma OS encontrada.")
 
     elif menu == "Sair":
-        st.session_state.clear()
-        st.success("Você saiu do sistema.")
-        st.experimental_rerun()
+    st.session_state.clear()
+    st.success("Você saiu do sistema.")
+    st.rerun()
 
 # ==========================
 # INICIALIZAÇÃO
