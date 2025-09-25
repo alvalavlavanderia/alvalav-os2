@@ -3,9 +3,10 @@ import sqlite3
 import pandas as pd
 from fpdf import FPDF
 
-# ==========================
+# --------------------------
 # BANCO DE DADOS
-# ==========================
+# --------------------------
+
 def init_db():
     conn = sqlite3.connect("sistema.db")
     c = conn.cursor()
