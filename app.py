@@ -2,8 +2,7 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from io import BytesIO
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
+from fpdf import FPDF
 from datetime import datetime
 
 # ==============================
@@ -109,23 +108,25 @@ def delete_os(os_id):
 # EXPORTAR PDF
 # ==============================
 def gerar_pdf_os(os_data):
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    largura, altura = A4
+    """
+    Gera um PDF da Ordem de Serviço usando FPDF.
+    """
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    
+    # Adiciona título
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(w=0, h=10, txt="Ordem de Serviço - Detalhes", ln=1, align="C")
+    pdf.ln(10)
 
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(50, altura - 50, "Ordem de Serviço - Detalhes")
-
-    c.setFont("Helvetica", 12)
-    y = altura - 100
+    # Adiciona os dados
+    pdf.set_font("Helvetica", "", 12)
     for campo, valor in os_data.items():
-        c.drawString(50, y, f"{campo}: {valor}")
-        y -= 20
+        pdf.cell(w=0, h=8, txt=f"{campo}: {valor}", ln=1)
 
-    c.showPage()
-    c.save()
-    buffer.seek(0)
-    return buffer
+    # Cria o PDF em memória
+    return BytesIO(pdf.output(dest='S').encode('latin-1'))
 
 # ==============================
 # TELAS
