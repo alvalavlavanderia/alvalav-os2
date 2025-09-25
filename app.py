@@ -1,3 +1,7 @@
+# Para que este aplicativo funcione, você precisa instalar a biblioteca fpdf.
+# Execute o seguinte comando no seu terminal:
+# pip install fpdf
+
 import streamlit as st
 import sqlite3
 import pandas as pd
