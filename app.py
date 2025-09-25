@@ -1,261 +1,215 @@
-# Para que este aplicativo funcione, você precisa instalar a biblioteca fpdf.
-# Execute o seguinte comando no seu terminal:
-
 import streamlit as st
 import sqlite3
 import pandas as pd
-from io import BytesIO
 from fpdf import FPDF
-from datetime import datetime
 
-
-# ==============================
+# ==========================
 # BANCO DE DADOS
-# ==============================
+# ==========================
 def init_db():
-    conn = sqlite3.connect("os_system.db")
+    conn = sqlite3.connect("sistema.db")
     c = conn.cursor()
 
-    # Tabela de usuários
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            usuario TEXT UNIQUE NOT NULL,
-            senha TEXT NOT NULL
-        )
-    """)
+    # Usuários
+    c.execute('''CREATE TABLE IF NOT EXISTS usuarios (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    usuario TEXT UNIQUE,
+                    senha TEXT,
+                    is_admin INTEGER)''')
 
-    # Usuário admin default
-    c.execute("SELECT * FROM usuarios WHERE usuario = 'admin'")
-    if not c.fetchone():
-        c.execute("INSERT INTO usuarios (usuario, senha) VALUES (?, ?)", ("admin", "1234"))
+    # Usuário admin fixo
+    c.execute("INSERT OR IGNORE INTO usuarios (usuario, senha, is_admin) VALUES (?, ?, ?)",
+              ("admin", "Alv32324@", 1))
 
-    # Tabela de empresas
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS empresas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            cnpj TEXT NOT NULL,
-            telefone TEXT NOT NULL
-        )
-    """)
+    # Empresas
+    c.execute('''CREATE TABLE IF NOT EXISTS empresas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nome TEXT,
+                    endereco TEXT,
+                    numero TEXT,
+                    cep TEXT,
+                    cidade TEXT,
+                    estado TEXT,
+                    telefone TEXT,
+                    cnpj TEXT)''')
 
-    # Tabela de OS
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS ordens_servico (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            empresa_id INTEGER NOT NULL,
-            descricao TEXT NOT NULL,
-            situacao TEXT NOT NULL,
-            data_abertura TEXT NOT NULL,
-            FOREIGN KEY (empresa_id) REFERENCES empresas(id)
-        )
-    """)
+    # Tipos de Serviço
+    c.execute('''CREATE TABLE IF NOT EXISTS tipos_servico (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nome TEXT)''')
+
+    # Ordens de Serviço
+    c.execute('''CREATE TABLE IF NOT EXISTS ordens_servico (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    empresa_id INTEGER,
+                    tipo_servico_id INTEGER,
+                    titulo TEXT,
+                    descricao TEXT,
+                    situacao TEXT,
+                    FOREIGN KEY (empresa_id) REFERENCES empresas (id),
+                    FOREIGN KEY (tipo_servico_id) REFERENCES tipos_servico (id))''')
 
     conn.commit()
     conn.close()
 
-# ==============================
-# FUNÇÕES DE BANCO
-# ==============================
-def get_empresas():
-    conn = sqlite3.connect("os_system.db")
-    df = pd.read_sql("SELECT * FROM empresas", conn)
-    conn.close()
-    return df
-
-def add_empresa(nome, cnpj, telefone):
-    conn = sqlite3.connect("os_system.db")
-    c = conn.cursor()
-    c.execute("INSERT INTO empresas (nome, cnpj, telefone) VALUES (?, ?, ?)", (nome, cnpj, telefone))
-    conn.commit()
-    conn.close()
-
-def add_os(empresa_id, descricao, situacao="Aberta"):
-    conn = sqlite3.connect("os_system.db")
-    c = conn.cursor()
-    c.execute(
-        "INSERT INTO ordens_servico (empresa_id, descricao, situacao, data_abertura) VALUES (?, ?, ?, ?)",
-        (empresa_id, descricao, situacao, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    )
-    conn.commit()
-    conn.close()
-
-def get_os(situacao=None, empresa_id=None):
-    conn = sqlite3.connect("os_system.db")
-    query = """
-        SELECT os.id, e.nome as empresa, os.descricao, os.situacao, os.data_abertura
-        FROM ordens_servico os
-        JOIN empresas e ON os.empresa_id = e.id
-        WHERE 1=1
-    """
-    params = []
-    if situacao:
-        query += " AND os.situacao = ?"
-        params.append(situacao)
-    if empresa_id:
-        query += " AND e.id = ?"
-        params.append(empresa_id)
-
-    df = pd.read_sql(query, conn, params=params)
-    conn.close()
-    return df
-
-def delete_os(os_id):
-    conn = sqlite3.connect("os_system.db")
-    c = conn.cursor()
-    c.execute("DELETE FROM ordens_servico WHERE id=?", (os_id,))
-    conn.commit()
-    conn.close()
-
-# ==============================
-# EXPORTAR PDF
-# ==============================
-def gerar_pdf_os(os_data):
-    """
-    Gera um PDF da Ordem de Serviço usando FPDF.
-    """
+# ==========================
+# PDF
+# ==========================
+def gerar_pdf_os(codigo, empresa, titulo, descricao, situacao):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    
-    # Adiciona título
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(w=0, h=10, txt="Ordem de Serviço - Detalhes", ln=1, align="C")
+    pdf.set_font("Arial", 'B', 16)
+
+    pdf.cell(200, 10, "Ordem de Servico", ln=True, align="C")
     pdf.ln(10)
 
-    # Adiciona os dados
-    pdf.set_font("Helvetica", "", 12)
-    for campo, valor in os_data.items():
-        pdf.cell(w=0, h=8, txt=f"{campo}: {valor}", ln=1)
+    pdf.set_font("Arial", '', 12)
+    pdf.cell(200, 10, f"Codigo: {codigo}", ln=True)
+    pdf.cell(200, 10, f"Empresa: {empresa}", ln=True)
+    pdf.cell(200, 10, f"Titulo: {titulo}", ln=True)
+    pdf.multi_cell(200, 10, f"Descricao: {descricao}")
+    pdf.cell(200, 10, f"Situacao: {situacao}", ln=True)
 
-    # Cria o PDF em memória
-    return BytesIO(pdf.output(dest='S').encode('latin-1'))
+    file_name = f"os_{codigo}.pdf"
+    pdf.output(file_name)
+    return file_name
 
-# ==============================
+# ==========================
 # TELAS
-# ==============================
+# ==========================
 def login_screen():
     st.title("🔑 Login no Sistema")
-
     usuario = st.text_input("Usuário")
     senha = st.text_input("Senha", type="password")
 
     if st.button("Entrar"):
-        conn = sqlite3.connect("os_system.db")
+        conn = sqlite3.connect("sistema.db")
         c = conn.cursor()
         c.execute("SELECT * FROM usuarios WHERE usuario=? AND senha=?", (usuario, senha))
         user = c.fetchone()
         conn.close()
 
         if user:
-            st.session_state["logged_in"] = True
+            st.session_state["usuario"] = usuario
+            st.session_state["is_admin"] = user[3]
             st.success(f"Bem-vindo, {usuario}!")
-            st.rerun()
         else:
-            st.error("Usuário ou senha incorretos.")
+            st.error("Usuário ou senha inválidos.")
 
-def cadastrar_empresa_ui():
-    st.subheader("🏢 Cadastrar Empresa")
+def cadastro_empresa():
+    st.subheader("🏢 Cadastro de Empresa")
 
-    with st.form("form_empresa"):
-        nome = st.text_input("Nome da Empresa *")
-        cnpj = st.text_input("CNPJ *")
+    with st.form("cadastro_empresa"):
+        nome = st.text_input("Empresa *")
+        endereco = st.text_input("Rua")
+        numero = st.text_input("Número")
+        cep = st.text_input("CEP")
+        cidade = st.text_input("Cidade")
+        estado = st.text_input("Estado")
         telefone = st.text_input("Telefone *")
-        submit = st.form_submit_button("Cadastrar")
+        cnpj = st.text_input("CNPJ *")
+        submitted = st.form_submit_button("Salvar")
 
-        if submit:
-            if not nome or not cnpj or not telefone:
-                st.error("Todos os campos são obrigatórios!")
+        if submitted:
+            if not nome or not telefone or not cnpj:
+                st.error("Preencha todos os campos obrigatórios (*)")
             else:
-                add_empresa(nome, cnpj, telefone)
+                conn = sqlite3.connect("sistema.db")
+                c = conn.cursor()
+                c.execute("INSERT INTO empresas (nome,endereco,numero,cep,cidade,estado,telefone,cnpj) VALUES (?,?,?,?,?,?,?,?)",
+                          (nome, endereco, numero, cep, cidade, estado, telefone, cnpj))
+                conn.commit()
+                conn.close()
                 st.success("Empresa cadastrada com sucesso!")
 
-def abrir_os_ui():
-    st.subheader("📝 Abrir Ordem de Serviço")
+def cadastro_tipo_servico():
+    st.subheader("🛠 Cadastro de Tipo de Serviço")
+    nome = st.text_input("Nome do Serviço")
+    if st.button("Salvar"):
+        if nome:
+            conn = sqlite3.connect("sistema.db")
+            c = conn.cursor()
+            c.execute("INSERT INTO tipos_servico (nome) VALUES (?)", (nome,))
+            conn.commit()
+            conn.close()
+            st.success("Tipo de serviço cadastrado com sucesso!")
 
-    empresas = get_empresas()
-    if empresas.empty:
-        st.warning("Cadastre uma empresa antes de abrir uma OS.")
-        return
+def cadastro_usuario():
+    st.subheader("👤 Cadastro de Usuário")
+    usuario = st.text_input("Usuário")
+    senha = st.text_input("Senha", type="password")
+    is_admin = st.checkbox("Administrador?")
 
-    with st.form("form_os"):
-        empresa = st.selectbox("Selecione a Empresa *", empresas["nome"].tolist(), index=None, placeholder="Escolha...")
-        descricao = st.text_area("Descrição *")
-        submit = st.form_submit_button("Abrir OS")
+    if st.button("Salvar Usuário"):
+        if usuario and senha:
+            conn = sqlite3.connect("sistema.db")
+            c = conn.cursor()
+            c.execute("INSERT INTO usuarios (usuario, senha, is_admin) VALUES (?,?,?)",
+                      (usuario, senha, 1 if is_admin else 0))
+            conn.commit()
+            conn.close()
+            st.success("Usuário cadastrado com sucesso!")
 
-        if submit:
-            if not empresa or not descricao:
-                st.error("Todos os campos são obrigatórios!")
-            else:
-                empresa_id = empresas.loc[empresas["nome"] == empresa, "id"].values[0]
-                add_os(empresa_id, descricao)
-                st.success("OS aberta com sucesso!")
+def abrir_os():
+    st.subheader("📌 Abrir Ordem de Serviço")
 
-def consultar_os_ui():
-    st.subheader("📋 Consultar Ordens de Serviço")
+    conn = sqlite3.connect("sistema.db")
+    c = conn.cursor()
+    empresas = c.execute("SELECT id, nome FROM empresas").fetchall()
+    tipos = c.execute("SELECT id, nome FROM tipos_servico").fetchall()
+    conn.close()
 
-    situacao = st.selectbox("Filtrar por Situação", ["", "Aberta", "Fechada"], index=1)
-    empresas = get_empresas()
-    empresa = st.selectbox("Filtrar por Empresa", [""] + empresas["nome"].tolist())
+    empresa = st.selectbox("Empresa *", [("", "")] + empresas, format_func=lambda x: x[1] if x else "")
+    tipo_servico = st.selectbox("Tipo de Serviço *", [("", "")] + tipos, format_func=lambda x: x[1] if x else "")
+    titulo = st.text_input("Título *")
+    descricao = st.text_area("Descrição *")
 
-    empresa_id = None
-    if empresa and empresa != "":
-        empresa_id = empresas.loc[empresas["nome"] == empresa, "id"].values[0]
+    if st.button("Salvar OS"):
+        if not empresa[0] or not tipo_servico[0] or not titulo or not descricao:
+            st.error("Preencha todos os campos obrigatórios (*)")
+        else:
+            conn = sqlite3.connect("sistema.db")
+            c = conn.cursor()
+            c.execute("INSERT INTO ordens_servico (empresa_id,tipo_servico_id,titulo,descricao,situacao) VALUES (?,?,?,?,?)",
+                      (empresa[0], tipo_servico[0], titulo, descricao, "Aberta"))
+            conn.commit()
+            conn.close()
+            st.success("Ordem de serviço aberta com sucesso!")
 
-    df = get_os(situacao if situacao else None, empresa_id)
+def consultar_os():
+    st.subheader("🔎 Consultar Ordens de Serviço")
 
-    if df.empty:
-        st.info("Nenhuma OS encontrada.")
-    else:
-        for i, row in df.iterrows():
-            st.write(f"**ID:** {row['id']} | **Empresa:** {row['empresa']} | **Situação:** {row['situacao']} | **Data:** {row['data_abertura']}")
-            st.write(f"**Descrição:** {row['descricao']}")
+    conn = sqlite3.connect("sistema.db")
+    query = """SELECT os.id, e.nome, os.titulo, os.descricao, os.situacao
+               FROM ordens_servico os
+               JOIN empresas e ON os.empresa_id = e.id"""
+    df = pd.read_sql(query, conn)
+    conn.close()
 
-            col1, col2, col3 = st.columns([1,1,2])
-            with col1:
-                if st.button(f"❌ Excluir OS {row['id']}"):
-                    delete_os(row["id"])
-                    st.success(f"OS {row['id']} excluída.")
-                    st.rerun()
-            with col2:
-                os_data = {
-                    "ID": row["id"],
-                    "Empresa": row["empresa"],
-                    "Situação": row["situacao"],
-                    "Data Abertura": row["data_abertura"],
-                    "Descrição": row["descricao"],
-                }
-                pdf_buffer = gerar_pdf_os(os_data)
-                st.download_button(
-                    label=f"📄 Exportar OS {row['id']} em PDF",
-                    data=pdf_buffer,
-                    file_name=f"os_{row['id']}.pdf",
-                    mime="application/pdf"
-                )
-            st.markdown("---")
+    # Filtros
+    situacao = st.selectbox("Filtrar por Situação", ["", "Aberta", "Finalizada"], index=1)
+    empresa = st.selectbox("Filtrar por Empresa", [""] + df["nome"].unique().tolist())
 
-# ==============================
-# MAIN
-# ==============================
-def main():
-    init_db()
+    if situacao:
+        df = df[df["situacao"] == situacao]
+    if empresa:
+        df = df[df["nome"] == empresa]
 
-    if "logged_in" not in st.session_state:
-        st.session_state["logged_in"] = False
+    if not df.empty:
+        for _, row in df.iterrows():
+            col1, col2, col3, col4, col5 = st.columns([1,2,2,2,2])
+            col1.write(row["id"])
+            col2.write(row["nome"])
+            col3.write(row["titulo"])
+            col4.write(row["situacao"])
 
-    if not st.session_state["logged_in"]:
-        login_screen()
-    else:
-        menu = ["Cadastrar Empresa", "Abrir OS", "Consultar OS"]
-        choice = st.sidebar.radio("Menu", menu)
-
-        if choice == "Cadastrar Empresa":
-            cadastrar_empresa_ui()
-        elif choice == "Abrir OS":
-            abrir_os_ui()
-        elif choice == "Consultar OS":
-            consultar_os_ui()
-
-if __name__ == "__main__":
-    main()
+            if col5.button("✏️", key=f"edit_{row['id']}"):
+                with st.form(f"edit_form_{row['id']}"):
+                    novo_titulo = st.text_input("Novo título", row["titulo"])
+                    nova_desc = st.text_area("Nova descrição", row["descricao"])
+                    nova_sit = st.selectbox("Situação", ["Aberta", "Finalizada"], index=0 if row["situacao"]=="Aberta" else 1)
+                    submitted = st.form_submit_button("Salvar alterações")
+                    if submitted:
+                        conn = sqlite3.connect("sistema.db")
+                        c = conn.cursor()
+                        c.execute("UPDATE ordens_servico SET titulo=?, descricao=?, situacao=? WHERE id=?",
