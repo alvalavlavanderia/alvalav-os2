@@ -4,6 +4,28 @@ import pandas as pd
 from fpdf import FPDF
 import bcrypt
 
+def init_db():
+    conn = sqlite3.connect("os_system.db")
+    cursor = conn.cursor()
+
+    # cria tabela usuarios
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario TEXT UNIQUE NOT NULL,
+            senha TEXT NOT NULL,
+            admin INTEGER NOT NULL
+        )
+    """)
+
+    # cria usuário admin com senha criptografada
+    senha_hash = bcrypt.hashpw("1234".encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    cursor.execute("INSERT OR IGNORE INTO usuarios (usuario, senha, admin) VALUES (?, ?, ?)",
+                   ("admin", senha_hash, 1))
+
+    conn.commit()
+    conn.close()
+
 # ==========================
 # BANCO DE DADOS
 # ==========================
