@@ -11,28 +11,29 @@ def init_db():
     c = conn.cursor()
 
     # Tabela de usuários
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            usuario TEXT UNIQUE,
-            senha TEXT
-        )
-    """)
+    c.execute('''CREATE TABLE IF NOT EXISTS usuarios (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    usuario TEXT UNIQUE NOT NULL,
+                    senha TEXT NOT NULL)''')
+
+    # Sempre garante que admin exista
+    c.execute("INSERT OR IGNORE INTO usuarios (usuario, senha) VALUES (?, ?)", ("admin", "1234"))
+
+    # Tabela de empresas
+    c.execute('''CREATE TABLE IF NOT EXISTS empresas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nome TEXT NOT NULL,
+                    cnpj TEXT NOT NULL,
+                    telefone TEXT NOT NULL)''')
 
     # Tabela de ordens de serviço
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS ordens_servico (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            titulo TEXT,
-            descricao TEXT,
-            situacao TEXT
-        )
-    """)
-
-    # Usuário admin padrão
-    c.execute("SELECT * FROM usuarios WHERE usuario=?", ("admin",))
-    if not c.fetchone():
-        c.execute("INSERT INTO usuarios (usuario, senha) VALUES (?, ?)", ("admin", "1234"))
+    c.execute('''CREATE TABLE IF NOT EXISTS ordens_servico (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    empresa_id INTEGER NOT NULL,
+                    titulo TEXT NOT NULL,
+                    descricao TEXT NOT NULL,
+                    situacao TEXT NOT NULL,
+                    FOREIGN KEY (empresa_id) REFERENCES empresas (id))''')
 
     conn.commit()
     conn.close()
@@ -48,70 +49,29 @@ def autenticar_usuario(usuario, senha):
     conn.close()
     return user
 
-def registrar_usuario(usuario, senha):
-    conn = sqlite3.connect("sistema.db")
-    c = conn.cursor()
-    try:
-        c.execute("INSERT INTO usuarios (usuario, senha) VALUES (?, ?)", (usuario, senha))
-        conn.commit()
-        sucesso = True
-    except sqlite3.IntegrityError:
-        sucesso = False
-    conn.close()
-    return sucesso
-
 # ==========================
-# FUNÇÕES DE ORDENS DE SERVIÇO
+# EXPORTAR OS EM PDF
 # ==========================
-def adicionar_ordem(titulo, descricao, situacao):
-    conn = sqlite3.connect("sistema.db")
-    c = conn.cursor()
-    c.execute("INSERT INTO ordens_servico (titulo, descricao, situacao) VALUES (?, ?, ?)", (titulo, descricao, situacao))
-    conn.commit()
-    conn.close()
-
-def listar_ordens():
-    conn = sqlite3.connect("sistema.db")
-    df = pd.read_sql_query("SELECT * FROM ordens_servico", conn)
-    conn.close()
-    return df
-
-def atualizar_ordem(id_, titulo, descricao, situacao):
-    conn = sqlite3.connect("sistema.db")
-    c = conn.cursor()
-    c.execute("UPDATE ordens_servico SET titulo=?, descricao=?, situacao=? WHERE id=?", (titulo, descricao, situacao, id_))
-    conn.commit()
-    conn.close()
-
-def deletar_ordem(id_):
-    conn = sqlite3.connect("sistema.db")
-    c = conn.cursor()
-    c.execute("DELETE FROM ordens_servico WHERE id=?", (id_,))
-    conn.commit()
-    conn.close()
-
-# ==========================
-# GERAR PDF
-# ==========================
-def gerar_pdf():
-    df = listar_ordens()
+def exportar_pdf(dados_os):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
 
-    pdf.cell(200, 10, "Relatório de Ordens de Serviço", ln=True, align="C")
+    pdf.cell(200, 10, txt="Ordem de Serviço", ln=True, align="C")
     pdf.ln(10)
 
-    for index, row in df.iterrows():
-        pdf.cell(0, 10, f"ID: {row['id']} - Título: {row['titulo']} - Situação: {row['situacao']}", ln=True)
+    for chave, valor in dados_os.items():
+        pdf.cell(200, 10, txt=f"{chave}: {valor}", ln=True)
 
-    pdf.output("relatorio_os.pdf")
+    filename = f"OS_{dados_os['ID']}.pdf"
+    pdf.output(filename)
+    return filename
 
 # ==========================
 # TELA DE LOGIN
 # ==========================
 def login_screen():
-    st.title("🔐 Login")
+    st.title("Login no Sistema")
 
     usuario = st.text_input("Usuário")
     senha = st.text_input("Senha", type="password")
@@ -121,64 +81,102 @@ def login_screen():
         if user:
             st.session_state["usuario"] = usuario
             st.success(f"Bem-vindo, {usuario}!")
-            st.rerun()
+            st.experimental_rerun()
         else:
-            st.error("Usuário ou senha incorretos.")
-
-    st.write("Ainda não tem conta?")
-    if st.button("Registrar"):
-        if usuario and senha:
-            if registrar_usuario(usuario, senha):
-                st.success("Usuário registrado com sucesso!")
-            else:
-                st.error("Usuário já existe.")
+            st.error("Usuário ou senha inválidos!")
 
 # ==========================
-# DASHBOARD PRINCIPAL
+# CADASTRO DE EMPRESAS
 # ==========================
-def main_screen():
-    st.title("📋 Sistema de Ordens de Serviço")
+def cadastro_empresas():
+    st.subheader("Cadastro de Empresa")
 
-    menu = ["Listar Ordens", "Nova Ordem", "Gerar PDF", "Sair"]
-    escolha = st.sidebar.selectbox("Menu", menu)
+    nome = st.text_input("Nome da Empresa *")
+    cnpj = st.text_input("CNPJ *")
+    telefone = st.text_input("Telefone *")
 
-    if escolha == "Listar Ordens":
-        df = listar_ordens()
-        st.dataframe(df)
+    if st.button("Salvar Empresa"):
+        if not nome or not cnpj or not telefone:
+            st.error("Todos os campos são obrigatórios!")
+        else:
+            conn = sqlite3.connect("sistema.db")
+            c = conn.cursor()
+            c.execute("INSERT INTO empresas (nome, cnpj, telefone) VALUES (?, ?, ?)", (nome, cnpj, telefone))
+            conn.commit()
+            conn.close()
+            st.success("Empresa cadastrada com sucesso!")
 
-        if not df.empty:
-            id_ = st.number_input("ID da OS para editar/deletar", min_value=1, step=1)
+# ==========================
+# ABRIR ORDEM DE SERVIÇO
+# ==========================
+def abrir_os():
+    st.subheader("Abrir Ordem de Serviço")
 
-            if st.button("Deletar OS"):
-                deletar_ordem(id_)
-                st.success("Ordem deletada com sucesso!")
-                st.rerun()
+    conn = sqlite3.connect("sistema.db")
+    empresas = pd.read_sql("SELECT id, nome FROM empresas", conn)
+    conn.close()
 
-            if st.button("Atualizar OS"):
-                titulo = st.text_input("Novo Título")
-                descricao = st.text_area("Nova Descrição")
-                situacao = st.selectbox("Nova Situação", ["Aberta", "Em andamento", "Concluída"])
-                atualizar_ordem(id_, titulo, descricao, situacao)
-                st.success("Ordem atualizada com sucesso!")
-                st.rerun()
+    empresa_id = st.selectbox("Selecione a Empresa *", [""] + list(empresas["id"].astype(str)))
+    titulo = st.text_input("Título *")
+    descricao = st.text_area("Descrição *")
+    situacao = st.selectbox("Situação *", ["", "Aberta", "Em Andamento", "Fechada"])
 
-    elif escolha == "Nova Ordem":
-        st.subheader("Criar Nova Ordem de Serviço")
-        titulo = st.text_input("Título")
-        descricao = st.text_area("Descrição")
-        situacao = st.selectbox("Situação", ["Aberta", "Em andamento", "Concluída"])
-        if st.button("Salvar"):
-            adicionar_ordem(titulo, descricao, situacao)
-            st.success("Ordem adicionada com sucesso!")
+    if st.button("Salvar OS"):
+        if not empresa_id or not titulo or not descricao or not situacao:
+            st.error("Todos os campos são obrigatórios!")
+        else:
+            conn = sqlite3.connect("sistema.db")
+            c = conn.cursor()
+            c.execute("INSERT INTO ordens_servico (empresa_id, titulo, descricao, situacao) VALUES (?, ?, ?, ?)",
+                      (empresa_id, titulo, descricao, situacao))
+            conn.commit()
+            conn.close()
+            st.success("Ordem de serviço aberta com sucesso!")
 
-    elif escolha == "Gerar PDF":
-        gerar_pdf()
-        st.success("PDF gerado com sucesso! (relatorio_os.pdf)")
+# ==========================
+# CONSULTAR ORDEM DE SERVIÇO
+# ==========================
+def consultar_os():
+    st.subheader("Consultar Ordens de Serviço")
 
-    elif escolha == "Sair":
-        st.session_state.pop("usuario", None)
-        st.success("Logout realizado com sucesso!")
-        st.rerun()
+    filtro_situacao = st.selectbox("Filtrar por Situação", [""] + ["Aberta", "Em Andamento", "Fechada"], index=1)
+
+    query = "SELECT os.id, e.nome AS empresa, os.titulo, os.descricao, os.situacao " \
+            "FROM ordens_servico os JOIN empresas e ON os.empresa_id = e.id"
+    if filtro_situacao:
+        query += " WHERE os.situacao=?"
+
+    conn = sqlite3.connect("sistema.db")
+    if filtro_situacao:
+        df = pd.read_sql(query, conn, params=(filtro_situacao,))
+    else:
+        df = pd.read_sql(query, conn)
+    conn.close()
+
+    if not df.empty:
+        for i, row in df.iterrows():
+            st.write(f"**OS {row['id']} - {row['titulo']}**")
+            st.write(f"Empresa: {row['empresa']}")
+            st.write(f"Descrição: {row['descricao']}")
+            st.write(f"Situação: {row['situacao']}")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button(f"Exportar PDF - OS {row['id']}"):
+                    dados_os = {
+                        "ID": row['id'],
+                        "Empresa": row['empresa'],
+                        "Título": row['titulo'],
+                        "Descrição": row['descricao'],
+                        "Situação": row['situacao']
+                    }
+                    arquivo = exportar_pdf(dados_os)
+                    st.success(f"PDF gerado: {arquivo}")
+            with col2:
+                st.write("---")
+
+    else:
+        st.info("Nenhuma OS encontrada.")
 
 # ==========================
 # MAIN
@@ -189,7 +187,18 @@ def main():
     if "usuario" not in st.session_state:
         login_screen()
     else:
-        main_screen()
+        st.sidebar.title("Menu")
+        opcao = st.sidebar.radio("Escolha uma opção", ["Cadastro de Empresa", "Abrir OS", "Consultar OS", "Sair"])
+
+        if opcao == "Cadastro de Empresa":
+            cadastro_empresas()
+        elif opcao == "Abrir OS":
+            abrir_os()
+        elif opcao == "Consultar OS":
+            consultar_os()
+        elif opcao == "Sair":
+            del st.session_state["usuario"]
+            st.experimental_rerun()
 
 if __name__ == "__main__":
     main()
