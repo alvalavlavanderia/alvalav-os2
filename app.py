@@ -81,9 +81,10 @@ def login_screen():
         if user:
             st.session_state["usuario"] = usuario
             st.success(f"Bem-vindo, {usuario}!")
-            st.experimental_rerun()
+            st.rerun()   # 🚀 Corrigido
         else:
             st.error("Usuário ou senha inválidos!")
+
 
 # ==========================
 # CADASTRO DE EMPRESAS
@@ -198,7 +199,8 @@ def main():
             consultar_os()
         elif opcao == "Sair":
             del st.session_state["usuario"]
-            st.experimental_rerun()
+            st.rerun()   # 🚀 Corrigido
+
 
 if __name__ == "__main__":
     main()
