@@ -187,12 +187,12 @@ def login_screen():
 
     if st.button("Entrar"):
         user = autenticar_usuario(usuario, senha)
-        if user:
-            st.session_state["usuario"] = {"nome": user[1], "admin": bool(user[3])}
+        if user and len(user) == 4:
+            st.session_state["usuario"] = {"id": user[0], "nome": user[1], "admin": bool(user[3])}
             st.success(f"Bem-vindo, {usuario}!")
             st.rerun()
         else:
-            st.error("Usuário ou senha inválidos!")
+            st.error("Usuário ou senha inválidos ou dados corrompidos!")
 
 
 def cadastro_empresas_ui():
