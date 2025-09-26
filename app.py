@@ -11,46 +11,34 @@ def init_db():
     c = conn.cursor()
 
     # Tabela de usuários
-    c.execute('''CREATE TABLE IF NOT EXISTS usuarios (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    usuario TEXT UNIQUE NOT NULL,
-                    senha TEXT NOT NULL
-                )''')
-
-    # Tabela de empresas
-    c.execute('''CREATE TABLE IF NOT EXISTS empresas (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    nome TEXT NOT NULL,
-                    endereco TEXT,
-                    numero TEXT,
-                    cep TEXT,
-                    cidade TEXT,
-                    estado TEXT,
-                    telefone TEXT NOT NULL,
-                    cnpj TEXT NOT NULL
-                )''')
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario TEXT UNIQUE,
+            senha TEXT
+        )
+    """)
 
     # Tabela de ordens de serviço
-    c.execute('''CREATE TABLE IF NOT EXISTS ordens_servico (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    empresa_id INTEGER NOT NULL,
-                    tipo_servico TEXT NOT NULL,
-                    titulo TEXT NOT NULL,
-                    descricao TEXT NOT NULL,
-                    situacao TEXT NOT NULL DEFAULT 'Aberta',
-                    FOREIGN KEY (empresa_id) REFERENCES empresas (id)
-                )''')
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS ordens_servico (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            titulo TEXT,
+            descricao TEXT,
+            situacao TEXT
+        )
+    """)
 
     # Usuário admin padrão
-    c.execute("SELECT * FROM usuarios WHERE usuario = ?", ("admin",))
+    c.execute("SELECT * FROM usuarios WHERE usuario=?", ("admin",))
     if not c.fetchone():
-        c.execute("INSERT INTO usuarios (usuario, senha) VALUES (?, ?)", ("admin", "admin"))
+        c.execute("INSERT INTO usuarios (usuario, senha) VALUES (?, ?)", ("admin", "1234"))
 
     conn.commit()
     conn.close()
 
 # ==========================
-# FUNÇÕES AUXILIARES
+# FUNÇÕES DE USUÁRIO
 # ==========================
 def autenticar_usuario(usuario, senha):
     conn = sqlite3.connect("sistema.db")
@@ -60,194 +48,148 @@ def autenticar_usuario(usuario, senha):
     conn.close()
     return user
 
-def cadastrar_empresa(nome, endereco, numero, cep, cidade, estado, telefone, cnpj):
+def registrar_usuario(usuario, senha):
     conn = sqlite3.connect("sistema.db")
     c = conn.cursor()
-    c.execute("INSERT INTO empresas (nome, endereco, numero, cep, cidade, estado, telefone, cnpj) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-              (nome, endereco, numero, cep, cidade, estado, telefone, cnpj))
+    try:
+        c.execute("INSERT INTO usuarios (usuario, senha) VALUES (?, ?)", (usuario, senha))
+        conn.commit()
+        sucesso = True
+    except sqlite3.IntegrityError:
+        sucesso = False
+    conn.close()
+    return sucesso
+
+# ==========================
+# FUNÇÕES DE ORDENS DE SERVIÇO
+# ==========================
+def adicionar_ordem(titulo, descricao, situacao):
+    conn = sqlite3.connect("sistema.db")
+    c = conn.cursor()
+    c.execute("INSERT INTO ordens_servico (titulo, descricao, situacao) VALUES (?, ?, ?)", (titulo, descricao, situacao))
     conn.commit()
     conn.close()
 
-def listar_empresas():
+def listar_ordens():
     conn = sqlite3.connect("sistema.db")
-    c = conn.cursor()
-    c.execute("SELECT id, nome FROM empresas")
-    empresas = c.fetchall()
-    conn.close()
-    return empresas
-
-def abrir_os(empresa_id, tipo_servico, titulo, descricao):
-    conn = sqlite3.connect("sistema.db")
-    c = conn.cursor()
-    c.execute("INSERT INTO ordens_servico (empresa_id, tipo_servico, titulo, descricao, situacao) VALUES (?, ?, ?, ?, 'Aberta')",
-              (empresa_id, tipo_servico, titulo, descricao))
-    conn.commit()
-    conn.close()
-
-def consultar_os(situacao=None, empresa_id=None):
-    conn = sqlite3.connect("sistema.db")
-    query = """SELECT os.id, e.nome as empresa, os.titulo, os.situacao
-               FROM ordens_servico os
-               JOIN empresas e ON os.empresa_id = e.id
-               WHERE 1=1"""
-    params = []
-    if situacao:
-        query += " AND os.situacao=?"
-        params.append(situacao)
-    if empresa_id:
-        query += " AND os.empresa_id=?"
-        params.append(empresa_id)
-
-    df = pd.read_sql(query, conn, params=params)
+    df = pd.read_sql_query("SELECT * FROM ordens_servico", conn)
     conn.close()
     return df
 
-def editar_os(id_os, titulo, descricao, situacao):
+def atualizar_ordem(id_, titulo, descricao, situacao):
     conn = sqlite3.connect("sistema.db")
     c = conn.cursor()
-    c.execute("""
-        UPDATE ordens_servico
-        SET titulo = ?, descricao = ?, situacao = ?
-        WHERE id = ?
-    """, (titulo, descricao, situacao, id_os))
+    c.execute("UPDATE ordens_servico SET titulo=?, descricao=?, situacao=? WHERE id=?", (titulo, descricao, situacao, id_))
     conn.commit()
     conn.close()
 
-def excluir_os(id_os):
+def deletar_ordem(id_):
     conn = sqlite3.connect("sistema.db")
     c = conn.cursor()
-    c.execute("DELETE FROM ordens_servico WHERE id=?", (id_os,))
+    c.execute("DELETE FROM ordens_servico WHERE id=?", (id_,))
     conn.commit()
     conn.close()
 
-def exportar_os_pdf(id_os):
-    conn = sqlite3.connect("sistema.db")
-    c = conn.cursor()
-    c.execute("""SELECT os.id, e.nome, os.tipo_servico, os.titulo, os.descricao, os.situacao
-                 FROM ordens_servico os
-                 JOIN empresas e ON os.empresa_id = e.id
-                 WHERE os.id=?""", (id_os,))
-    os_dados = c.fetchone()
-    conn.close()
-
-    if not os_dados:
-        return None
-
+# ==========================
+# GERAR PDF
+# ==========================
+def gerar_pdf():
+    df = listar_ordens()
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
 
-    pdf.cell(200, 10, txt=f"Ordem de Serviço #{os_dados[0]}", ln=True, align="C")
+    pdf.cell(200, 10, "Relatório de Ordens de Serviço", ln=True, align="C")
     pdf.ln(10)
-    pdf.cell(200, 10, txt=f"Empresa: {os_dados[1]}", ln=True)
-    pdf.cell(200, 10, txt=f"Tipo de Serviço: {os_dados[2]}", ln=True)
-    pdf.cell(200, 10, txt=f"Título: {os_dados[3]}", ln=True)
-    pdf.multi_cell(0, 10, txt=f"Descrição: {os_dados[4]}")
-    pdf.cell(200, 10, txt=f"Situação: {os_dados[5]}", ln=True)
 
-    filename = f"os_{os_dados[0]}.pdf"
-    pdf.output(filename)
-    return filename
+    for index, row in df.iterrows():
+        pdf.cell(0, 10, f"ID: {row['id']} - Título: {row['titulo']} - Situação: {row['situacao']}", ln=True)
+
+    pdf.output("relatorio_os.pdf")
 
 # ==========================
-# TELAS DO SISTEMA
+# TELA DE LOGIN
 # ==========================
 def login_screen():
-    st.title("🔑 Login no Sistema")
+    st.title("🔐 Login")
+
     usuario = st.text_input("Usuário")
     senha = st.text_input("Senha", type="password")
+
     if st.button("Entrar"):
-    user = autenticar_usuario(usuario, senha)
-    if user:
-        st.session_state["usuario"] = usuario
-        st.success(f"Bem-vindo, {usuario}!")
-        st.rerun()   # <--- aqui
-    else:
-        st.error("Usuário ou senha incorretos.")
-
-def main_app():
-    st.sidebar.title("📋 Menu")
-    menu = st.sidebar.selectbox("Escolha uma opção", ["Cadastrar Empresa", "Abrir OS", "Consultar OS", "Sair"])
-
-    if menu == "Cadastrar Empresa":
-        st.header("🏢 Cadastro de Empresa")
-        nome = st.text_input("Empresa*")
-        endereco = st.text_input("Rua")
-        numero = st.text_input("Número")
-        cep = st.text_input("CEP")
-        cidade = st.text_input("Cidade")
-        estado = st.text_input("Estado")
-        telefone = st.text_input("Telefone*")
-        cnpj = st.text_input("CNPJ*")
-
-        if st.button("Cadastrar"):
-            if nome and telefone and cnpj:
-                cadastrar_empresa(nome, endereco, numero, cep, cidade, estado, telefone, cnpj)
-                st.success("Empresa cadastrada com sucesso!")
-            else:
-                st.error("Preencha todos os campos obrigatórios (*)")
-
-    elif menu == "Abrir OS":
-        st.header("📝 Abrir Ordem de Serviço")
-        empresas = listar_empresas()
-        empresa_dict = {e[1]: e[0] for e in empresas}
-        empresa = st.selectbox("Empresa*", [""] + list(empresa_dict.keys()))
-        tipo_servico = st.text_input("Tipo de Serviço*")
-        titulo = st.text_input("Título*")
-        descricao = st.text_area("Descrição*")
-
-        if st.button("Abrir OS"):
-            if empresa and tipo_servico and titulo and descricao:
-                abrir_os(empresa_dict[empresa], tipo_servico, titulo, descricao)
-                st.success("Ordem de Serviço aberta com sucesso!")
-            else:
-                st.error("Preencha todos os campos obrigatórios (*)")
-
-    elif menu == "Consultar OS":
-        st.header("🔍 Consultar Ordens de Serviço")
-        situacao = st.selectbox("Filtrar por Situação", ["", "Aberta", "Finalizada"])
-        empresas = listar_empresas()
-        empresa_dict = {e[1]: e[0] for e in empresas}
-        empresa = st.selectbox("Filtrar por Empresa", [""] + list(empresa_dict.keys()))
-
-        empresa_id = empresa_dict.get(empresa) if empresa else None
-        df = consultar_os(situacao if situacao else None, empresa_id)
-
-        if not df.empty:
-            st.dataframe(df)
-
-            id_os = st.number_input("Informe o código da OS para Editar/Excluir/Exportar", min_value=1, step=1)
-
-            if st.button("Exportar PDF"):
-                filename = exportar_os_pdf(id_os)
-                if filename:
-                    with open(filename, "rb") as f:
-                        st.download_button("📥 Baixar PDF", f, file_name=filename)
-                else:
-                    st.error("OS não encontrada.")
-
-            if st.button("Excluir OS"):
-                excluir_os(id_os)
-                st.success("OS excluída com sucesso!")
-                st.experimental_rerun()
-
+        user = autenticar_usuario(usuario, senha)
+        if user:
+            st.session_state["usuario"] = usuario
+            st.success(f"Bem-vindo, {usuario}!")
+            st.rerun()
         else:
-            st.info("Nenhuma OS encontrada.")
+            st.error("Usuário ou senha incorretos.")
 
-    elif menu == "Sair":
-    st.session_state.clear()
-    st.success("Você saiu do sistema.")
-    st.rerun()
+    st.write("Ainda não tem conta?")
+    if st.button("Registrar"):
+        if usuario and senha:
+            if registrar_usuario(usuario, senha):
+                st.success("Usuário registrado com sucesso!")
+            else:
+                st.error("Usuário já existe.")
 
 # ==========================
-# INICIALIZAÇÃO
+# DASHBOARD PRINCIPAL
+# ==========================
+def main_screen():
+    st.title("📋 Sistema de Ordens de Serviço")
+
+    menu = ["Listar Ordens", "Nova Ordem", "Gerar PDF", "Sair"]
+    escolha = st.sidebar.selectbox("Menu", menu)
+
+    if escolha == "Listar Ordens":
+        df = listar_ordens()
+        st.dataframe(df)
+
+        if not df.empty:
+            id_ = st.number_input("ID da OS para editar/deletar", min_value=1, step=1)
+
+            if st.button("Deletar OS"):
+                deletar_ordem(id_)
+                st.success("Ordem deletada com sucesso!")
+                st.rerun()
+
+            if st.button("Atualizar OS"):
+                titulo = st.text_input("Novo Título")
+                descricao = st.text_area("Nova Descrição")
+                situacao = st.selectbox("Nova Situação", ["Aberta", "Em andamento", "Concluída"])
+                atualizar_ordem(id_, titulo, descricao, situacao)
+                st.success("Ordem atualizada com sucesso!")
+                st.rerun()
+
+    elif escolha == "Nova Ordem":
+        st.subheader("Criar Nova Ordem de Serviço")
+        titulo = st.text_input("Título")
+        descricao = st.text_area("Descrição")
+        situacao = st.selectbox("Situação", ["Aberta", "Em andamento", "Concluída"])
+        if st.button("Salvar"):
+            adicionar_ordem(titulo, descricao, situacao)
+            st.success("Ordem adicionada com sucesso!")
+
+    elif escolha == "Gerar PDF":
+        gerar_pdf()
+        st.success("PDF gerado com sucesso! (relatorio_os.pdf)")
+
+    elif escolha == "Sair":
+        st.session_state.pop("usuario", None)
+        st.success("Logout realizado com sucesso!")
+        st.rerun()
+
+# ==========================
+# MAIN
 # ==========================
 def main():
     init_db()
+
     if "usuario" not in st.session_state:
         login_screen()
     else:
-        main_app()
+        main_screen()
 
 if __name__ == "__main__":
     main()
