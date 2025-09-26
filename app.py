@@ -9,7 +9,6 @@ def criar_banco():
     conn = sqlite3.connect("sistema_os.db")
     c = conn.cursor()
 
-    # Usuários
     c.execute("""
         CREATE TABLE IF NOT EXISTS usuarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,7 +18,6 @@ def criar_banco():
         )
     """)
 
-    # Empresas
     c.execute("""
         CREATE TABLE IF NOT EXISTS empresas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,7 +32,6 @@ def criar_banco():
         )
     """)
 
-    # Serviços
     c.execute("""
         CREATE TABLE IF NOT EXISTS servicos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +39,6 @@ def criar_banco():
         )
     """)
 
-    # Ordem de Serviço
     c.execute("""
         CREATE TABLE IF NOT EXISTS ordens (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,7 +52,6 @@ def criar_banco():
         )
     """)
 
-    # Criar usuário admin padrão
     senha_hash = bcrypt.hashpw("1234".encode("utf-8"), bcrypt.gensalt())
     c.execute("INSERT OR IGNORE INTO usuarios (id, usuario, senha, tipo) VALUES (1, ?, ?, ?)",
               ("admin", senha_hash, "admin"))
@@ -74,14 +69,13 @@ def autenticar_usuario(usuario, senha):
     c.execute("SELECT * FROM usuarios WHERE usuario=?", (usuario,))
     user = c.fetchone()
     conn.close()
-
     if user and bcrypt.checkpw(senha.encode("utf-8"), user[2]):
         return user
     return None
 
 
 # ======================
-# CADASTROS
+# CADASTRO EMPRESA
 # ======================
 def cadastro_empresa():
     st.subheader("🏢 Cadastro de Empresa")
@@ -113,6 +107,9 @@ def cadastro_empresa():
                 st.success("✅ Empresa cadastrada com sucesso!")
 
 
+# ======================
+# CADASTRO SERVIÇO
+# ======================
 def cadastro_servico():
     st.subheader("🛠️ Cadastro de Tipo de Serviço")
 
@@ -132,6 +129,9 @@ def cadastro_servico():
                 st.success("✅ Serviço cadastrado com sucesso!")
 
 
+# ======================
+# CADASTRO USUÁRIO
+# ======================
 def cadastro_usuario():
     st.subheader("👤 Cadastro de Usuário (apenas Admin)")
 
@@ -159,14 +159,13 @@ def cadastro_usuario():
 
 
 # ======================
-# ORDEM DE SERVIÇO
+# ABRIR ORDEM DE SERVIÇO
 # ======================
 def abrir_os():
     st.subheader("📌 Abrir Ordem de Serviço")
 
     conn = sqlite3.connect("sistema_os.db")
     c = conn.cursor()
-
     empresas = c.execute("SELECT id, nome FROM empresas").fetchall()
     servicos = c.execute("SELECT id, nome FROM servicos").fetchall()
     conn.close()
@@ -176,6 +175,7 @@ def abrir_os():
         titulo = st.text_input("Título*").strip()
         descricao = st.text_area("Descrição*").strip()
         tipo_servico = st.selectbox("Tipo de Serviço*", [f"{s[0]} - {s[1]}" for s in servicos]) if servicos else None
+        situacao = "Aberta"
 
         submitted = st.form_submit_button("Abrir OS")
 
@@ -191,12 +191,60 @@ def abrir_os():
                 c.execute("""
                     INSERT INTO ordens (empresa_id, titulo, descricao, tipo_servico_id, situacao)
                     VALUES (?, ?, ?, ?, ?)
-                """, (empresa_id, titulo, descricao, servico_id, "Aberta"))
+                """, (empresa_id, titulo, descricao, servico_id, situacao))
                 conn.commit()
                 conn.close()
                 st.success("✅ Ordem de Serviço aberta com sucesso!")
 
 
+# ======================
+# EDITAR ORDEM DE SERVIÇO
+# ======================
+def editar_os(ordem_id):
+    st.subheader(f"✏️ Editar OS {ordem_id}")
+
+    conn = sqlite3.connect("sistema_os.db")
+    c = conn.cursor()
+    ordem = c.execute("SELECT empresa_id, titulo, descricao, tipo_servico_id, situacao FROM ordens WHERE id=?",
+                      (ordem_id,)).fetchone()
+    empresas = c.execute("SELECT id, nome FROM empresas").fetchall()
+    servicos = c.execute("SELECT id, nome FROM servicos").fetchall()
+    conn.close()
+
+    if not ordem:
+        st.error("⚠️ OS não encontrada!")
+        return
+
+    with st.form(f"form_edit_os_{ordem_id}"):
+        empresa_atual = f"{ordem[0]} - {[e[1] for e in empresas if e[0] == ordem[0]][0]}"
+        empresa = st.selectbox("Empresa*", [f"{e[0]} - {e[1]}" for e in empresas], index=[f"{e[0]} - {e[1]}" for e in empresas].index(empresa_atual))
+        titulo = st.text_input("Título*", ordem[1])
+        descricao = st.text_area("Descrição*", ordem[2])
+        servico_atual = f"{ordem[3]} - {[s[1] for s in servicos if s[0] == ordem[3]][0]}"
+        tipo_servico = st.selectbox("Tipo de Serviço*", [f"{s[0]} - {s[1]}" for s in servicos], index=[f"{s[0]} - {s[1]}" for s in servicos].index(servico_atual))
+        situacao = st.selectbox("Situação*", ["Aberta", "Finalizada"], index=0 if ordem[4] == "Aberta" else 1)
+
+        submitted = st.form_submit_button("Salvar Alterações")
+
+        if submitted:
+            empresa_id = int(empresa.split(" - ")[0])
+            servico_id = int(tipo_servico.split(" - ")[0])
+
+            conn = sqlite3.connect("sistema_os.db")
+            c = conn.cursor()
+            c.execute("""
+                UPDATE ordens
+                SET empresa_id=?, titulo=?, descricao=?, tipo_servico_id=?, situacao=?
+                WHERE id=?
+            """, (empresa_id, titulo, descricao, servico_id, situacao, ordem_id))
+            conn.commit()
+            conn.close()
+            st.success("✅ OS atualizada com sucesso!")
+
+
+# ======================
+# CONSULTAR OS
+# ======================
 def consultar_os():
     st.subheader("🔎 Consultar Ordens de Serviço")
 
@@ -216,7 +264,7 @@ def consultar_os():
         col1, col2 = st.columns(2)
         with col1:
             if st.button("✏️ Editar", key=f"edit_{ordem[0]}"):
-                st.warning("Função de edição ainda não implementada.")
+                st.session_state["editando_os"] = ordem[0]
         with col2:
             if st.button("🗑️ Excluir", key=f"delete_{ordem[0]}"):
                 conn = sqlite3.connect("sistema_os.db")
@@ -226,17 +274,18 @@ def consultar_os():
                 conn.close()
                 st.success(f"✅ OS {ordem[0]} excluída!")
 
+    if "editando_os" in st.session_state:
+        editar_os(st.session_state["editando_os"])
+
 
 # ======================
-# TELA PRINCIPAL
+# APP PRINCIPAL
 # ======================
 def main():
     criar_banco()
-
     st.title("📂 Sistema de Ordens de Serviço")
 
     if "usuario" not in st.session_state:
-        # Tela de login
         st.subheader("🔐 Login")
         usuario = st.text_input("Usuário")
         senha = st.text_input("Senha", type="password")
@@ -249,7 +298,6 @@ def main():
                 st.error("❌ Usuário ou senha inválidos.")
         return
 
-    # Menu lateral em estilo lista (expanders)
     menu = None
     with st.sidebar:
         st.title("📋 Menu")
@@ -273,7 +321,6 @@ def main():
             del st.session_state["usuario"]
             st.rerun()
 
-    # Roteamento de menus
     if menu == "cad_empresa":
         cadastro_empresa()
     elif menu == "cad_servico":
