@@ -6,15 +6,18 @@ import bcrypt
 # CONFIGURAÇÃO
 # ======================
 DB_NAME = "sistema_os.db"
-ADMIN_PASSWORD = "1234" # Senha inicial para o admin
+ADMIN_PASSWORD = "1234" 
 
 # ======================
 # BANCO DE DADOS - Operações Centralizadas
 # ======================
 def conectar_bd():
-    """Retorna uma conexão e um cursor para o banco de dados."""
-    # O timeout pode ajudar em ambientes de rede mais lentos
-    return sqlite3.connect(DB_NAME, timeout=10), sqlite3.connect(DB_NAME, timeout=10).cursor()
+    """Retorna uma única conexão e um cursor para o banco de dados.
+    Aumenta o timeout para 15 segundos para evitar 'database is locked'."""
+    # A correção está aqui: abre a conexão UMA vez e usa o timeout
+    conn = sqlite3.connect(DB_NAME, timeout=15) 
+    c = conn.cursor()
+    return conn, c
 
 def criar_banco():
     """Cria as tabelas e o usuário administrador inicial."""
@@ -73,27 +76,26 @@ def criar_banco():
     conn.close()
 
 def db_fetch(query, params=()):
-    """Executa SELECT e retorna todos os resultados."""
+    """Executa SELECT e retorna todos os resultados, fechando a conexão."""
     conn, c = conectar_bd()
     c.execute(query, params)
     data = c.fetchall()
-    conn.close()
+    conn.close() # Fechamento imediato
     return data
 
 def db_execute(query, params=()):
-    """Executa INSERT/UPDATE/DELETE e retorna True em sucesso."""
+    """Executa INSERT/UPDATE/DELETE e retorna True em sucesso, fechando a conexão."""
     conn, c = conectar_bd()
     try:
         c.execute(query, params)
         conn.commit()
         return True
     except sqlite3.IntegrityError as e:
-        conn.close()
         return str(e)
     except Exception as e:
-        conn.close()
         return str(e)
     finally:
+        # Garante que a conexão SEMPRE seja fechada
         conn.close()
 
 
@@ -412,8 +414,8 @@ def consultar_os():
 
 
 # ======================
-# INICIALIZAÇÃO DO BANCO DE DADOS (OPÇÃO 2)
-# Executado UMA ÚNICA VEZ ao iniciar o app, prevenindo loops de recarregamento
+# INICIALIZAÇÃO DO BANCO DE DADOS
+# Executado UMA ÚNICA VEZ ao iniciar o app.
 # ======================
 criar_banco()
 
@@ -439,7 +441,7 @@ def main():
                 st.rerun()
             else:
                 st.error("❌ Usuário ou senha inválidos.")
-        return # Garante que nada abaixo seja executado se o usuário não estiver logado
+        return 
 
     # --- Lógica do Menu (Após Login) ---
     with st.sidebar:
@@ -459,7 +461,6 @@ def main():
         with st.expander("📄 Ordens de Serviço", expanded=True):
             if st.button("Abrir OS", key="btn_abrir_os", use_container_width=True):
                 st.session_state["menu_selecionado"] = "abrir_os"
-            # Botão em destaque para a principal funcionalidade
             if st.button("Consultar/Gerenciar OS", key="btn_consultar_os", type="primary", use_container_width=True):
                 st.session_state["menu_selecionado"] = "consultar_os"
 
@@ -472,7 +473,6 @@ def main():
     # 2. Roteamento de Páginas
     menu = st.session_state.get("menu_selecionado", "consultar_os")
 
-    # Limpa o estado de edição ao mudar de página
     if menu != "consultar_os" and "editando_os" in st.session_state:
         del st.session_state["editando_os"]
 
