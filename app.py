@@ -15,65 +15,55 @@ def get_conn():
 # INIT DB
 # ----------------------------
 def init_db():
-    conn = get_conn()
+    conn = sqlite3.connect("sistema_os.db")
     c = conn.cursor()
 
-    # Usuários (id, usuario, senha_hash, is_admin)
+    # Criação das tabelas
     c.execute("""
-    CREATE TABLE IF NOT EXISTS usuarios (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario TEXT UNIQUE NOT NULL,
-        senha TEXT NOT NULL,
-        is_admin INTEGER NOT NULL DEFAULT 0
-    )
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario TEXT UNIQUE NOT NULL,
+            senha TEXT NOT NULL,
+            is_admin INTEGER NOT NULL
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS empresas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            cnpj TEXT,
+            telefone TEXT,
+            endereco TEXT
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS tipos_servico (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL UNIQUE
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS ordens_servico (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            empresa_id INTEGER NOT NULL,
+            tipo_servico_id INTEGER NOT NULL,
+            descricao TEXT NOT NULL,
+            situacao TEXT NOT NULL,
+            FOREIGN KEY(empresa_id) REFERENCES empresas(id),
+            FOREIGN KEY(tipo_servico_id) REFERENCES tipos_servico(id)
+        )
     """)
 
-    # Empresas
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS empresas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL,
-        cnpj TEXT,
-        telefone TEXT,
-        rua TEXT,
-        numero TEXT,
-        cep TEXT,
-        cidade TEXT,
-        estado TEXT
-    )
-    """)
-
-    # Tipos de serviço
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS tipos_servico (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL
-    )
-    """)
-
-    # Ordens de serviço
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS ordens_servico (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        empresa_id INTEGER NOT NULL,
-        titulo TEXT NOT NULL,
-        descricao TEXT NOT NULL,
-        tipo_servico_id INTEGER NOT NULL,
-        situacao TEXT NOT NULL,
-        FOREIGN KEY (empresa_id) REFERENCES empresas(id),
-        FOREIGN KEY (tipo_servico_id) REFERENCES tipos_servico(id)
-    )
-    """)
-
-    # Cria admin padrão (ADMIN / 1234) se não existir
-    c.execute("SELECT id FROM usuarios WHERE usuario = 'ADMIN'")
+    # Criar usuário admin padrão apenas se não existir
+    senha_hash = bcrypt.hashpw("1234".encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    c.execute("SELECT * FROM usuarios WHERE usuario = ?", ("ADMIN",))
     if not c.fetchone():
-        senha_hash = bcrypt.hashpw("1234".encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
         c.execute("INSERT INTO usuarios (usuario, senha, is_admin) VALUES (?, ?, ?)",
                   ("ADMIN", senha_hash, 1))
 
     conn.commit()
     conn.close()
+
 
 # ----------------------------
 # AUTENTICAÇÃO
