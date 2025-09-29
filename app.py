@@ -282,69 +282,56 @@ def abrir_os():
 # EDITAR ORDEM DE SERVIÇO
 # ======================
 def editar_os(ordem_id):
-    st.subheader(f"✏️ Editar OS **#{ordem_id}**")
+    st.subheader(f"✏️ Editar OS {ordem_id}")
 
-    ordem = db_fetch("SELECT empresa_id, titulo, descricao, tipo_servico_id, situacao FROM ordens WHERE id=?",
-                     (ordem_id,))
-    empresas = get_options_from_db("empresas")
-    servicos = get_options_from_db("servicos")
+    conn = sqlite3.connect("sistema_os.db")
+    c = conn.cursor()
+    ordem = c.execute("SELECT empresa_id, titulo, descricao, tipo_servico_id, situacao FROM ordens WHERE id=?",
+                      (ordem_id,)).fetchone()
+    empresas = c.execute("SELECT id, nome FROM empresas").fetchall()
+    servicos = c.execute("SELECT id, nome FROM servicos").fetchall()
+    conn.close()
 
     if not ordem:
         st.error("⚠️ OS não encontrada!")
         return
 
-    ordem = ordem[0]
-
-    empresa_opcoes = [formatar_opcao_select(e) for e in empresas]
-    servico_opcoes = [formatar_opcao_select(s) for s in servicos]
-
-    try:
-        empresa_inicial = next(formatar_opcao_select(e) for e in empresas if e[0] == ordem[0])
-        servico_inicial = next(formatar_opcao_select(s) for s in servicos if s[0] == ordem[3])
-        situacao_inicial = ordem[4]
-
-        empresa_index = empresa_opcoes.index(empresa_inicial)
-        servico_index = servico_opcoes.index(servico_inicial)
-        situacao_opcoes = ["Aberta", "Finalizada"]
-        situacao_index = situacao_opcoes.index(situacao_inicial)
-
-    except (StopIteration, ValueError):
-        st.error("⚠️ Dados de referência (Empresa ou Serviço) não encontrados para esta OS. Verifique os cadastros.")
-        return
-
+    empresa_atual = f"{ordem[0]} - {[e[1] for e in empresas if e[0] == ordem[0]][0]}"
+    servico_atual = f"{ordem[3]} - {[s[1] for s in servicos if s[0] == ordem[3]][0]}"
 
     with st.form(f"form_edit_os_{ordem_id}"):
-        empresa = st.selectbox("Empresa*", empresa_opcoes, index=empresa_index)
+        empresa = st.selectbox("Empresa*", [f"{e[0]} - {e[1]}" for e in empresas],
+                               index=[f"{e[0]} - {e[1]}" for e in empresas].index(empresa_atual))
         titulo = st.text_input("Título*", ordem[1])
         descricao = st.text_area("Descrição*", ordem[2])
-        tipo_servico = st.selectbox("Tipo de Serviço*", servico_opcoes, index=servico_index)
-        situacao = st.selectbox("Situação*", situacao_opcoes, index=situacao_index)
+        tipo_servico = st.selectbox("Tipo de Serviço*", [f"{s[0]} - {s[1]}" for s in servicos],
+                                    index=[f"{s[0]} - {s[1]}" for s in servicos].index(servico_atual))
+        situacao = st.selectbox("Situação*", ["Aberta", "Finalizada"], index=0 if ordem[4] == "Aberta" else 1)
 
-        col_save, col_cancel = st.columns(2)
-        with col_save:
-            submitted = st.form_submit_button("✅ Salvar Alterações", type="primary", use_container_width=True)
-        with col_cancel:
-            if st.button("↩️ Cancelar Edição", use_container_width=True):
-                del st.session_state["editando_os"]
-                st.rerun()
+        submitted = st.form_submit_button("💾 Salvar Alterações")
 
         if submitted:
-            empresa_id = parse_opcao_select(empresa)
-            servico_id = parse_opcao_select(tipo_servico)
+            empresa_id = int(empresa.split(" - ")[0])
+            servico_id = int(tipo_servico.split(" - ")[0])
 
-            query = """
+            conn = sqlite3.connect("sistema_os.db")
+            c = conn.cursor()
+            c.execute("""
                 UPDATE ordens
                 SET empresa_id=?, titulo=?, descricao=?, tipo_servico_id=?, situacao=?
                 WHERE id=?
-            """
-            resultado = db_execute(query, (empresa_id, titulo, descricao, servico_id, situacao, ordem_id))
+            """, (empresa_id, titulo, descricao, servico_id, situacao, ordem_id))
+            conn.commit()
+            conn.close()
+            st.success("✅ OS atualizada com sucesso!")
+            del st.session_state["editando_os"]
+            st.rerun()
 
-            if resultado is True:
-                st.success("✅ OS atualizada com sucesso!")
-                del st.session_state["editando_os"]
-                st.rerun()
-            else:
-                 st.error(f"❌ Erro ao atualizar OS: {resultado}")
+    # botão de cancelar precisa ficar fora do form
+    if st.button("↩️ Cancelar Edição"):
+        del st.session_state["editando_os"]
+        st.rerun()
+
 
 
 # ======================
